@@ -10,15 +10,12 @@
         body { background-color: #f4f6f9; font-family: system-ui, -apple-system, sans-serif; }
         .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
         
-        /* 3-Tier Alert System Colors */
         .status-green { background-color: #d1e7dd !important; color: #0f5132 !important; }
         .status-yellow { background-color: #fff3cd !important; color: #664d03 !important; }
         .status-red { background-color: #f8d7da !important; color: #842029 !important; font-weight: bold !important; }
         
-        /* Missing Field Error State */
         .field-error { border: 2px dashed #dc3545 !important; background-color: #fff5f5 !important; }
 
-        /* Status Light Dots */
         .status-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
         .dot-red { background-color: #dc3545; box-shadow: 0 0 6px #dc3545; }
         .dot-yellow { background-color: #ffc107; box-shadow: 0 0 6px #ffc107; }
@@ -27,15 +24,28 @@
 
         .scroll-table { max-height: 250px; overflow-y: auto; }
         
-        .section-block { border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; margin-bottom: 15px; background: white; }
+        .section-block { border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; margin-bottom: 15px; background: white; transition: all 0.2s; }
         .section-confirmed { border-left: 5px solid #198754; background-color: #f8fffb; }
         .section-has-error { border-left: 5px solid #dc3545; background-color: #fffafd; }
         
         .inline-action-box { background-color: #fff; border: 1px solid #dc3545; border-radius: 4px; padding: 12px; margin-top: 10px; }
+        .alert-item-container { scroll-margin-top: 20px; }
         
-        /* Layout Grid for Dashboard Badge Units */
-        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
-        .dashboard-badge { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; }
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+        .dashboard-badge { display: flex; flex-direction: column; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; }
+        .dashboard-badge.badge-danger-alert { border: 2px solid #dc3545; background-color: #fff8f8; }
+        .dashboard-badge.badge-warning-alert { border: 2px solid #ffc107; background-color: #fffff2; }
+        .badge-action-text { font-size: 10px; font-style: italic; margin-top: 4px; border-top: 1px dashed #dee2e6; padding-top: 4px; }
+        .text-red-alert { color: #b02a37; }
+        .text-yellow-alert { color: #664d03; }
+
+        /* FIXED NOTES BADGE: High-visibility formatting override styles */
+        .custom-yellow-notes-badge {
+            background-color: #ffc107 !important;
+            color: #000000 !important;
+            font-weight: 700 !important;
+            border: 2px solid #000000 !important;
+        }
     </style>
 </head>
 <body>
@@ -52,7 +62,10 @@
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
             <h4 class="text-secondary mb-0">🚨 Live System Status (Cloud Synced Database)</h4>
-            <span class="text-muted small" id="latestLogMeta">Fetching live spreadsheet entries...</span>
+            <div class="text-end" style="max-width: 50%;">
+                <span class="text-muted d-block small mb-1" id="latestLogMeta">Fetching entries...</span>
+                <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Logged</span>
+            </div>
         </div>
         <div class="dashboard-grid" id="fullWidthStatusDashboard"></div>
     </div>
@@ -72,26 +85,26 @@
                             <label class="form-label fw-bold">Shift Window</label>
                             <select id="shift" class="form-control" onchange="lockSubmissionOnChanges()">
                                 <option value="" disabled selected>Select Shift...</option>
-                                <option value="7-8AM">7-8 AM Shift</option>
-                                <option value="3PM">3 PM Shift</option>
-                                <option value="9PM">9 PM Shift</option>
+                                <option value="7-8AM">7-8 AM Shift (6AM-9AM)</option>
+                                <option value="3PM">3 PM Shift (2PM-5PM)</option>
+                                <option value="9PM">9 PM Shift (7PM-9:30PM)</option>
+                                <option value="Recheck">Recheck (Ad-Hoc Follow up Check)</option>
                             </select>
                         </div>
                     </div>
 
                     <div id="wizardSectionsContainer">
-                        
                         <div class="section-block" id="block-sec1">
                             <h5 class="fw-bold text-primary mb-3">🥛 1. Dairy / Refrigerated (31°F - 40°F)</h5>
                             <div class="row g-2">
-                                <div class="col-6"><label class="small">Shredded Cheese</label><input type="number" data-key="shredded_cheese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Cottage Cheese</label><input type="number" data-key="cottage_cheese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Yogurt</label><input type="number" data-key="yogurt" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Biscuits</label><input type="number" data-key="biscuits" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Butter</label><input type="number" data-key="butter" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Eggs</label><input type="number" data-key="eggs" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Juice</label><input type="number" data-key="juice" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Milk</label><input type="number" data-key="milk" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-shredded_cheese"><label class="small">Shredded Cheese</label><input type="number" data-key="shredded_cheese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-cottage_cheese"><label class="small">Cottage Cheese</label><input type="number" data-key="cottage_cheese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-yogurt"><label class="small">Yogurt</label><input type="number" data-key="yogurt" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-biscuits"><label class="small">Biscuits</label><input type="number" data-key="biscuits" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-butter"><label class="small">Butter</label><input type="number" data-key="butter" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-eggs"><label class="small">Eggs</label><input type="number" data-key="eggs" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-juice"><label class="small">Juice</label><input type="number" data-key="juice" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-milk"><label class="small">Milk</label><input type="number" data-key="milk" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
                             </div>
                             <div class="dynamic-action-area mt-3" id="actions-sec1"></div>
                         </div>
@@ -99,9 +112,9 @@
                         <div class="section-block" id="block-sec2">
                             <h5 class="fw-bold text-primary mb-3">🍦 2. Ice Cream / Frozen (-10°F - 10°F)</h5>
                             <div class="row g-2">
-                                <div class="col-4"><label class="small">Ice Cream Pails</label><input type="number" data-key="ice_cream_pails" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Ice Cream Squares</label><input type="number" data-key="ice_cream_squares" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Ice Cream Novelties</label><input type="number" data-key="ice_cream_novelties" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-ice_cream_pails"><label class="small">Ice Cream Pails</label><input type="number" data-key="ice_cream_pails" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-ice_cream_squares"><label class="small">Ice Cream Squares</label><input type="number" data-key="ice_cream_squares" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-ice_cream_novelties"><label class="small">Ice Cream Novelties</label><input type="number" data-key="ice_cream_novelties" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
                             </div>
                             <div class="dynamic-action-area mt-3" id="actions-sec2"></div>
                         </div>
@@ -109,22 +122,22 @@
                         <div class="section-block" id="block-sec3">
                             <h5 class="fw-bold text-primary mb-3">📦 3. Frozen / Prepared Foods (-10°F - 10°F)</h5>
                             <div class="row g-2">
-                                <div class="col-6"><label class="small">Garlic Bread</label><input type="number" data-key="garlic_bread" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Chinese</label><input type="number" data-key="chinese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Dessert</label><input type="number" data-key="dessert" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Breakfast</label><input type="number" data-key="breakfast" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Bulk Items</label><input type="number" data-key="bulk_items" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Frozen Potatoes</label><input type="number" data-key="frozen_potatoes" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Vegetable</label><input type="number" data-key="vegetable" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Stouffers</label><input type="number" data-key="stouffers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Banquet</label><input type="number" data-key="banquet" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Lean Cuisine</label><input type="number" data-key="lean_cuisine" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Pizza</label><input type="number" data-key="pizza" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Pizza Rolls</label><input type="number" data-key="pizza_rolls" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Burritos</label><input type="number" data-key="burritos" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Meat (Frozen)</label><input type="number" data-key="meat_frozen" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Breaded Fish</label><input type="number" data-key="breaded_fish" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Frozen Bakery</label><input type="number" data-key="frozen_bakery" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-garlic_bread"><label class="small">Garlic Bread</label><input type="number" data-key="garlic_bread" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-chinese"><label class="small">Chinese</label><input type="number" data-key="chinese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-dessert"><label class="small">Dessert</label><input type="number" data-key="dessert" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-breakfast"><label class="small">Breakfast</label><input type="number" data-key="breakfast" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-bulk_items"><label class="small">Bulk Items</label><input type="number" data-key="bulk_items" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-frozen_potatoes"><label class="small">Frozen Potatoes</label><input type="number" data-key="frozen_potatoes" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-vegetable"><label class="small">Vegetable</label><input type="number" data-key="vegetable" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-stouffers"><label class="small">Stouffers</label><input type="number" data-key="stouffers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-banquet"><label class="small">Banquet</label><input type="number" data-key="banquet" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-lean_cuisine"><label class="small">Lean Cuisine</label><input type="number" data-key="lean_cuisine" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-pizza"><label class="small">Pizza</label><input type="number" data-key="pizza" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-pizza_rolls"><label class="small">Pizza Rolls</label><input type="number" data-key="pizza_rolls" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-burritos"><label class="small">Burritos</label><input type="number" data-key="burritos" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-meat_frozen"><label class="small">Meat (Frozen)</label><input type="number" data-key="meat_frozen" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-breaded_fish"><label class="small">Breaded Fish</label><input type="number" data-key="breaded_fish" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-frozen_bakery"><label class="small">Frozen Bakery</label><input type="number" data-key="frozen_bakery" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
                             </div>
                             <div class="dynamic-action-area mt-3" id="actions-sec3"></div>
                         </div>
@@ -132,10 +145,10 @@
                         <div class="section-block" id="block-sec4">
                             <h5 class="fw-bold text-primary mb-3">🥩 4. Fresh Meat / Seafood (32°F - 38°F)</h5>
                             <div class="row g-2">
-                                <div class="col-6"><label class="small">Meat Fish</label><input type="number" data-key="meat_fish" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Meat Chicken</label><input type="number" data-key="meat_chicken" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Fresh Grinds</label><input type="number" data-key="fresh_grinds" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-6"><label class="small">Johnsonville Case</label><input type="number" data-key="johnsonville_case" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-meat_fish"><label class="small">Meat Fish</label><input type="number" data-key="meat_fish" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-meat_chicken"><label class="small">Meat Chicken</label><input type="number" data-key="meat_chicken" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-fresh_grinds"><label class="small">Fresh Grinds</label><input type="number" data-key="fresh_grinds" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6 alert-item-container" id="container-johnsonville_case"><label class="small">Johnsonville Case</label><input type="number" data-key="johnsonville_case" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
                             </div>
                             <div class="dynamic-action-area mt-3" id="actions-sec4"></div>
                         </div>
@@ -143,9 +156,9 @@
                         <div class="section-block" id="block-sec5">
                             <h5 class="fw-bold text-primary mb-3">🥪 5. Deli / Lunchmeat (31°F - 40°F)</h5>
                             <div class="row g-2">
-                                <div class="col-4"><label class="small">Deli Salads</label><input type="number" data-key="deli_salads" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Lunchmeat Bacon</label><input type="number" data-key="lunchmeat_bacon" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Lunchmeat</label><input type="number" data-key="lunchmeat" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-deli_salads"><label class="small">Deli Salads</label><input type="number" data-key="deli_salads" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-lunchmeat_bacon"><label class="small">Lunchmeat Bacon</label><input type="number" data-key="lunchmeat_bacon" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-lunchmeat"><label class="small">Lunchmeat</label><input type="number" data-key="lunchmeat" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
                             </div>
                             <div class="dynamic-action-area mt-3" id="actions-sec5"></div>
                         </div>
@@ -153,19 +166,24 @@
                         <div class="section-block" id="block-sec6">
                             <h5 class="fw-bold text-primary mb-3">🍎 6. Produce (32°F - 55°F)</h5>
                             <div class="row g-2">
-                                <div class="col-4"><label class="small">Produce Lettuce</label><input type="number" data-key="produce_lettuce" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Peppers</label><input type="number" data-key="peppers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Cucumbers</label><input type="number" data-key="cucumbers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Salad Mix</label><input type="number" data-key="salad_mix" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Apples</label><input type="number" data-key="apples" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
-                                <div class="col-4"><label class="small">Strawberries</label><input type="number" data-key="strawberries" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-produce_lettuce"><label class="small">Produce Lettuce</label><input type="number" data-key="produce_lettuce" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-peppers"><label class="small">Peppers</label><input type="number" data-key="peppers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-cucumbers"><label class="small">Cucumbers</label><input type="number" data-key="cucumbers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-salad_mix"><label class="small">Salad Mix</label><input type="number" data-key="salad_mix" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-apples"><label class="small">Apples</label><input type="number" data-key="apples" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4 alert-item-container" id="container-strawberries"><label class="small">Strawberries</label><input type="number" data-key="strawberries" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
                             </div>
                             <div class="dynamic-action-area mt-3" id="actions-sec6"></div>
                         </div>
                     </div>
 
-                    <button type="button" id="validateFormBtn" class="btn btn-primary w-100 mt-4 py-2 shadow-sm fw-bold fs-5">🔍 Validate Worksheet & Check Alerts</button>
+                    <div class="bg-light p-3 rounded border mb-3">
+                        <label class="form-label fw-bold text-secondary">📋 Freehand Inspector Shift Notes</label>
+                        <textarea id="freehandNotes" class="form-control" rows="2" placeholder="Enter custom log observations or rack notes..."></textarea>
+                    </div>
 
+                    <button type="button" id="validateFormBtn" class="btn btn-primary w-100 mt-2 py-2 shadow-sm fw-bold fs-5">🔍 Step 1: Validate Worksheet & Check Alerts</button>
+                    <button type="button" id="validateActionsBtn" style="display:none;" class="btn btn-warning w-100 mt-2 py-2 shadow-sm fw-bold fs-5 text-dark">🛡️ Step 2: Verify Action Protocols</button>
                     <button type="button" id="finalSubmitBtn" disabled class="btn btn-secondary w-100 mt-2 py-3 shadow-sm fw-bold fs-5">🔒 Complete Log & Submit to Sheet</button>
                 </form>
             </div>
@@ -198,10 +216,8 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
-    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbzafYhCYTH0RpKyDbqXPkjmlumfFW2oRkVaq0VCRO5q0g0U7JXZ67QC-T35dasaDqk8/exec";
+    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbwGhFxNTL2XhcfCA4662Xv37GTXTi55aTIplA9zPhwIiud8brd5jOItUBKipIc-lGmX/exec";
 
     const caseSchema = {
         shredded_cheese:     { label: "Shredded Cheese",   min: 31, max: 40, sec: "sec1" },
@@ -252,10 +268,6 @@
     let trendChartInstance = null;
     let globalActiveActionsArray = [];
 
-    setInterval(() => {
-        document.getElementById('liveClock').innerText = new Date().toLocaleString();
-    }, 1000);
-
     function determineStatusClass(value, limits) {
         if (isNaN(value) || value === null || value === "") return "";
         if (value < limits.min || value > limits.max) return "status-red";
@@ -274,11 +286,9 @@
     }
 
     function lockSubmissionOnChanges() {
-        const submitBtn = document.getElementById('finalSubmitBtn');
-        if (!submitBtn.disabled) {
-            submitBtn.disabled = true;
-            submitBtn.classList.replace('btn-success', 'btn-secondary');
-        }
+        document.getElementById('finalSubmitBtn').disabled = true;
+        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
+        document.getElementById('validateActionsBtn').style.display = "none";
     }
 
     function resetWizardState() {
@@ -290,39 +300,33 @@
         document.querySelectorAll('input[data-key]').forEach(input => {
             input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
         });
+        document.getElementById('freehandNotes').value = "";
         lockSubmissionOnChanges();
     }
 
-    // THE WORKSHEET VALIDATOR
+    // STAGE 1 VERIFIER PASS
     document.getElementById('validateFormBtn').addEventListener('click', function() {
         const initials = document.getElementById('initials').value.trim();
         const shift = document.getElementById('shift').value;
-        if (!initials || !shift) { 
-            alert("⚠️ Missing Fields: Please complete Inspector Initials and Shift Window selection."); 
-            return; 
-        }
+        if (!initials || !shift) { alert("⚠️ Missing Fields: Complete initials and select a shift window."); return; }
 
-        // MEMORY RECALL: Read all currently checked boxes right now before wiping containers
         let selectedMemoryCache = {};
         document.querySelectorAll('.action-checkbox-node:checked').forEach(cb => {
             const cooler = cb.getAttribute('data-cooler');
-            const val = cb.value;
             if (!selectedMemoryCache[cooler]) selectedMemoryCache[cooler] = [];
-            selectedMemoryCache[cooler].push(val);
+            selectedMemoryCache[cooler].push(cb.value);
         });
 
         let formHasMissingFields = false;
-        let redAlertsBySection = { sec1: [], sec2: [], sec3: [], sec4: [], sec5: [], sec6: [] };
+        let alertsBySection = { sec1: [], sec2: [], sec3: [], sec4: [], sec5: [], sec6: [] };
+        let firstFailedCoolerKey = null;
 
-        // Clean previous status styling labels
         wizardOrder.forEach(sec => {
             document.getElementById("block-" + sec).classList.remove('section-confirmed', 'section-has-error');
             document.getElementById("actions-" + sec).innerHTML = "";
         });
 
-        // Scan all numerical fields
-        const allInputs = document.querySelectorAll('input[data-key]');
-        allInputs.forEach(input => {
+        document.querySelectorAll('input[data-key]').forEach(input => {
             input.classList.remove('field-error');
             const key = input.getAttribute('data-key');
             const value = input.value.trim();
@@ -334,112 +338,124 @@
                 formHasMissingFields = true;
             } else {
                 let numVal = parseFloat(value);
-                if (determineStatusClass(numVal, caseSchema[key]) === "status-red") {
-                    redAlertsBySection[sectionId].push({ key: key, label: caseSchema[key].label, val: numVal });
+                let status = determineStatusClass(numVal, caseSchema[key]);
+                if (status === "status-red" || status === "status-yellow") {
+                    alertsBySection[sectionId].push({ key: key, label: caseSchema[key].label, val: numVal, status: status });
+                    if (!firstFailedCoolerKey) firstFailedCoolerKey = key;
                 }
             }
         });
 
         if (formHasMissingFields) {
-            // Re-render whatever layout fields we can down below so checkbox entries don't vanish visually
-            renderAlertBoxes(redAlertsBySection, selectedMemoryCache);
-            alert("⚠️ Missing Fields: Please complete all empty highlighted fields across categories.");
+            renderAlertBoxes(alertsBySection, selectedMemoryCache);
+            alert("⚠️ Missing Fields: Complete all highlighted empty fields.");
             return;
         }
 
-        let totalRedSpikes = renderAlertBoxes(redAlertsBySection, selectedMemoryCache);
+        let totalSpikes = renderAlertBoxes(alertsBySection, selectedMemoryCache);
 
-        if (totalRedSpikes > 0) {
-            alert(`⚠️ Action Required: Detected ${totalRedSpikes} out-of-spec temperature entry/entries.\n\nCorrective action checkboxes have been updated. Please ensure at least one box is checked for each flagged unit.`);
+        if (totalSpikes > 0) {
+            document.getElementById('validateActionsBtn').style.display = "block";
+            document.getElementById('finalSubmitBtn').disabled = true;
+            document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
             
-            // Unlocks submission button for compliance evaluation parsing
-            const submitBtn = document.getElementById('finalSubmitBtn');
-            submitBtn.disabled = false;
-            submitBtn.classList.replace('btn-secondary', 'btn-success');
+            if (firstFailedCoolerKey) {
+                setTimeout(() => {
+                    var el = document.getElementById("container-" + firstFailedCoolerKey);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 150);
+            }
+            alert(`⚠️ Action Required: Detected ${totalSpikes} anomalies (Yellow/Red). Review actions, then run Step 2 verify.`);
             return;
         }
 
-        // Clean slate run
-        alert("✅ Form successfully validated! All parameters are within normal spec boundaries. Submission gate is unlocked.");
+        alert("✅ Worksheet successfully verified. Master submission gate is open.");
         globalActiveActionsArray = [];
-        const submitBtn = document.getElementById('finalSubmitBtn');
-        submitBtn.disabled = false;
-        submitBtn.classList.replace('btn-secondary', 'btn-success');
+        document.getElementById('validateActionsBtn').style.display = "none";
+        document.getElementById('finalSubmitBtn').disabled = false;
+        document.getElementById('finalSubmitBtn').classList.replace('btn-secondary', 'btn-success');
     });
 
-    // Sub-routine logic to output dynamic alert wrapper rows onto view layouts
-    function renderAlertBoxes(redAlertsBySection, selectedMemoryCache) {
-        let totalRedSpikes = 0;
-
-        for (let secId in redAlertsBySection) {
-            const block = document.getElementById("block-" + secId);
-            const actionArea = document.getElementById("actions-" + secId);
-
-            if (redAlertsBySection[secId].length > 0) {
-                totalRedSpikes += redAlertsBySection[secId].length;
-                block.classList.add('section-has-error');
-
-                let actionHtml = `<div class="inline-action-box">
-                    <h6 class="text-danger fw-bold mb-2">🚨 Out-of-Range Incidents (Corrective Action Options Required Below):</h6>`;
-                
-                redAlertsBySection[secId].forEach(alertItem => {
-                    actionHtml += `<div class="mb-2 pb-2 border-bottom alert-protocol-wrapper" data-alert-cooler="${alertItem.key}">
-                        <span class="badge bg-danger mb-1">${alertItem.label}: ${alertItem.val}°F</span>
-                        <div class="row g-1">`;
-                    
-                    ["Moved Product to Back-of-House Cooler","Moved Product to Back-of-House Freezer","Placed Unit into Defrost Mode","Scheduled Temperature Recheck for 1 Hour","Contacted Company for Service Call","Contacted Company for Emergency Service","Notified Management Team","Checked Rack for Active Alarms"].forEach((act, idx) => {
-                        // Check if memory has this option marked previously
-                        let isChecked = (selectedMemoryCache[alertItem.key] && selectedMemoryCache[alertItem.key].includes(act)) ? "checked" : "";
-                        
-                        actionHtml += `<div class="col-6">
-                            <div class="form-check">
-                                <input class="form-check-input action-checkbox-node" type="checkbox" ${isChecked} data-cooler="${alertItem.key}" data-label="${alertItem.label}" value="${act}" id="chk-${alertItem.key}-${idx}">
-                                <label class="form-check-label text-dark" style="font-size:10px;" for="chk-${alertItem.key}-${idx}">${act}</label>
-                            </div>
-                        </div>`;
-                    });
-                    actionHtml += `</div></div>`;
-                });
-                actionHtml += `</div>`;
-                actionArea.innerHTML = actionHtml;
-            } else {
-                // If there were no missing rows flagged, label as confirmed completely
-                if(!block.classList.contains('section-has-error')) {
-                    block.classList.add('section-confirmed');
-                }
-            }
-        }
-        return totalRedSpikes;
-    }
-
-    // FINAL SUBMISSION CHECK GATE
-    document.getElementById('finalSubmitBtn').addEventListener('click', function() {
-        const submitBtn = document.getElementById('finalSubmitBtn');
+    // STAGE 2 COMPLIANCE PASS
+    document.getElementById('validateActionsBtn').addEventListener('click', function() {
         const alertWrappers = document.querySelectorAll('.alert-protocol-wrapper');
         let validationFailed = false;
         globalActiveActionsArray = [];
+        let firstMissingActionContainer = null;
 
         alertWrappers.forEach(container => {
             const checkedBoxes = container.querySelectorAll('.action-checkbox-node:checked');
-            
             if (checkedBoxes.length === 0) {
                 validationFailed = true;
-                container.style.border = "2px solid #dc3545";
+                container.style.border = "3px solid #dc3545";
                 container.style.backgroundColor = "#fff0f0";
+                if (!firstMissingActionContainer) firstMissingActionContainer = container;
             } else {
-                container.style.border = "none";
-                container.style.backgroundColor = "transparent";
+                container.style.border = "none"; container.style.backgroundColor = "transparent";
                 let coolerLabel = checkedBoxes[0].getAttribute('data-label');
+                let alertType = container.getAttribute('data-alert-type');
                 let measures = Array.from(checkedBoxes).map(cb => cb.value).join(" | ");
-                globalActiveActionsArray.push(`${coolerLabel}: [${measures}]`);
+                globalActiveActionsArray.push(`${alertType} -> ${coolerLabel}: [${measures}]`);
             }
         });
 
         if (validationFailed) {
-            alert(`⚠️ SUBMISSION REFUSED:\n\nYou must select at least one corrective action choice for all highlighted critical red items before the cloud database sync can continue.`);
+            if (firstMissingActionContainer) {
+                firstMissingActionContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            alert(`⚠️ VERIFICATION REFUSED:\n\nYou must confirm the corrective action protocols for all highlighted rows.`);
             return;
         }
 
+        alert("✅ Step 2 Action Verification Clear! Master submission switch opened.");
+        document.getElementById('finalSubmitBtn').disabled = false;
+        document.getElementById('finalSubmitBtn').classList.replace('btn-secondary', 'btn-success');
+    });
+
+    function renderAlertBoxes(alertsBySection, selectedMemoryCache) {
+        let totalSpikes = 0;
+        for (let secId in alertsBySection) {
+            const block = document.getElementById("block-" + secId);
+            const actionArea = document.getElementById("actions-" + secId);
+
+            if (alertsBySection[secId].length > 0) {
+                totalSpikes += alertsBySection[secId].length;
+                block.classList.add('section-has-error');
+
+                let actionHtml = `<div class="inline-action-box"><h6 class="text-dark fw-bold mb-2">🚨 Out-of-Spec Protocols Required:</h6>`;
+                alertsBySection[secId].forEach(alertItem => {
+                    let badgeClass = alertItem.status === "status-red" ? "bg-danger" : "bg-warning text-dark";
+                    
+                    actionHtml += `<div class="mb-2 pb-2 border-bottom alert-protocol-wrapper" data-alert-type="${alertItem.status === 'status-red' ? 'CRITICAL-ALERT' : 'CAUTION-RECHECK'}" data-alert-cooler="${alertItem.key}">
+                        <span class="badge ${badgeClass} mb-1">${alertItem.label}: ${alertItem.val}°F</span>
+                        <div class="row g-1">`;
+                    
+                    if (alertItem.status === "status-yellow") {
+                        actionHtml += `<div class="col-12"><div class="form-check">
+                            <input class="form-check-input action-checkbox-node" type="checkbox" checked data-cooler="${alertItem.key}" data-label="${alertItem.label}" value="Recheck in 1 Hour" id="chk-${alertItem.key}-recheck">
+                            <label class="form-check-label text-dark fw-bold" style="font-size:11px;" for="chk-${alertItem.key}-recheck">Recheck in 1 Hour (Enforced Compliance)</label>
+                        </div></div>`;
+                    } else {
+                        ["Moved Product to Back-of-House Cooler","Moved Product to Back-of-House Freezer","Placed Unit into Defrost Mode","Recheck in 1 Hour","Contacted Company for Service Call","Contacted Company for Emergency Service","Notified Management Team","Checked Rack for Active Alarms"].forEach((act, idx) => {
+                            let isChecked = (selectedMemoryCache[alertItem.key] && selectedMemoryCache[alertItem.key].includes(act)) ? "checked" : "";
+                            actionHtml += `<div class="col-6"><div class="form-check">
+                                <input class="form-check-input action-checkbox-node" type="checkbox" ${isChecked} data-cooler="${alertItem.key}" data-label="${alertItem.label}" value="${act}" id="chk-${alertItem.key}-${idx}">
+                                <label class="form-check-label text-dark" style="font-size:10px;" for="chk-${alertItem.key}-${idx}">${act}</label>
+                            </div></div>`;
+                        });
+                    }
+                    actionHtml += `</div></div>`;
+                });
+                actionArea.innerHTML = actionHtml + `</div>`;
+            } else {
+                if(!block.classList.contains('section-has-error')) block.classList.add('section-confirmed');
+            }
+        }
+        return totalSpikes;
+    }
+
+    document.getElementById('finalSubmitBtn').addEventListener('click', function() {
+        if (document.getElementById('finalSubmitBtn').disabled) return;
         executeCloudPublish();
     });
 
@@ -451,7 +467,8 @@
             time: new Date().toLocaleString(),
             user: document.getElementById('initials').value.toUpperCase(),
             shift: document.getElementById('shift').value,
-            actions_taken: globalActiveActionsArray.length > 0 ? globalActiveActionsArray.join("; ") : "None Required"
+            actions_taken: globalActiveActionsArray.length > 0 ? globalActiveActionsArray.join("; ") : "None Required",
+            inspector_notes: document.getElementById('freehandNotes').value.trim() || "None Logged"
         };
         for (let key in caseSchema) {
             newRecord[key] = parseFloat(document.querySelector(`input[data-key="${key}"]`).value);
@@ -468,10 +485,10 @@
             resetWizardState();
             renderSystemView();
             syncLatestFromCloud();
-            alert("🚀 Log entry securely published to cloud ledger spreadsheet rows!");
+            alert("🚀 Log secure-synced to cloud layout records!");
         })
         .catch(err => {
-            alert("Upload failure. Saved locally onto device clipboards: " + err);
+            alert("Upload failure. Saved locally: " + err);
             submitBtn.disabled = false; submitBtn.innerText = "Retry Submission Sync";
         });
     }
@@ -481,32 +498,30 @@
         const thead = document.getElementById('tableHead');
         select.innerHTML = ''; let headHtml = '<tr><th>Timestamp</th><th>By</th><th>Shift</th>';
         for (let key in caseSchema) {
-            let option = document.createElement('option'); option.value = key; option.innerText = caseSchema[key].label;
-            select.appendChild(option); headHtml += `<th>${caseSchema[key].label}</th>`;
+            select.appendChild(new Option(caseSchema[key].label, key));
+            headHtml += `<th>${caseSchema[key].label}</th>`;
         }
-        thead.innerHTML = headHtml + '</tr>'; select.value = 'milk';
+        thead.innerHTML = headHtml + '<th>Log Actions</th><th>Notes</th></tr>'; select.value = 'milk';
     }
 
     function syncLatestFromCloud() {
-        const metaLabel = document.getElementById('latestLogMeta');
-        metaLabel.innerText = "🔄 Pulling live metrics from spreadsheet tower...";
-
         fetch(cloudSpreadsheetURL)
-        .then(response => response.json())
+        .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 cloudLastRowData = res.data;
-                metaLabel.innerText = `Last Logged: Shift ${cloudLastRowData.shift} by ${cloudLastRowData.user} on ${cloudLastRowData.time}`;
+                document.getElementById('latestLogMeta').innerText = `Last Logged: Shift ${cloudLastRowData.shift} by ${cloudLastRowData.user} on ${cloudLastRowData.time}`;
+                
+                var cleanNoteString = cloudLastRowData["inspector_notes"] || cloudLastRowData.inspector_notes || "None Logged";
+                document.getElementById('dashboardNotesView').innerText = "Notes: " + cleanNoteString;
+                
                 renderDashboardLights(cloudLastRowData);
             } else {
-                metaLabel.innerText = "⚠️ Cloud Empty: No baseline logs found inside spreadsheet columns.";
                 renderDashboardLights(null);
             }
         })
-        .catch(err => {
-            metaLabel.innerText = "⚠️ Network Offline: Displaying local fallback records cache.";
+        .catch(() => {
             if(localDB.length > 0) renderDashboardLights(localDB[localDB.length - 1]);
-            else renderDashboardLights(null);
         });
     }
 
@@ -514,54 +529,70 @@
         const statusDashboard = document.getElementById('fullWidthStatusDashboard');
         statusDashboard.innerHTML = '';
 
+        let compiledActionMap = {};
+        if (targetRow && targetRow.actions_taken && targetRow.actions_taken !== "None Required") {
+            let parts = targetRow.actions_taken.split("; ");
+            parts.forEach(part => {
+                let match = part.match(/(?:CRITICAL-ALERT|CAUTION-RECHECK) -> (.*?): \[(.*?)\]/);
+                if (match) compiledActionMap[match[1]] = match[2];
+            });
+        }
+
         for (let key in caseSchema) {
             let limits = caseSchema[key];
-            let valueText = "N/A"; let lightClass = "dot-gray";
+            let valueText = "N/A"; let lightClass = "dot-gray"; let alertBorderClass = ""; let actionableTextDiv = "";
 
             if (targetRow && targetRow[key] !== undefined && targetRow[key] !== "") {
                 let actualVal = parseFloat(targetRow[key]);
                 valueText = `${actualVal}°F`;
                 let statusClass = determineStatusClass(actualVal, limits);
-                if (statusClass === "status-red") lightClass = "dot-red";
-                else if (statusClass === "status-yellow") lightClass = "dot-yellow";
+                
+                if (statusClass === "status-red") {
+                    lightClass = "dot-red";
+                    alertBorderClass = "badge-danger-alert";
+                    let protocolText = compiledActionMap[limits.label] || "Action Taken Logged";
+                    actionableTextDiv = `<div class="badge-action-text text-red-alert">🛠️ ${protocolText}</div>`;
+                }
+                else if (statusClass === "status-yellow") {
+                    lightClass = "dot-yellow";
+                    alertBorderClass = "badge-warning-alert";
+                    let protocolText = compiledActionMap[limits.label] || "Recheck in 1hr";
+                    actionableTextDiv = `<div class="badge-action-text text-yellow-alert">⏳ ${protocolText}</div>`;
+                }
                 else if (statusClass === "status-green") lightClass = "dot-green";
             }
 
             statusDashboard.innerHTML += `
-                <div class="dashboard-badge shadow-sm">
-                    <div class="text-truncate me-1" style="max-width:130px;" title="${limits.label}">
-                        <span class="status-dot ${lightClass}"></span><span class="fw-semibold">${limits.label}</span>
-                    </div><span class="fw-bold text-secondary">${valueText}</span>
+                <div class="dashboard-badge shadow-sm ${alertBorderClass}">
+                    <div class="d-flex justify-content-between align-items-center w-100">
+                        <div class="text-truncate" style="max-width:140px;">
+                            <span class="status-dot ${lightClass}"></span><span class="fw-semibold">${limits.label}</span>
+                        </div>
+                        <span class="fw-bold text-secondary">${valueText}</span>
+                    </div>
+                    ${actionableTextDiv}
                 </div>`;
         }
     }
 
     function renderSystemView() {
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
+        const tbody = document.getElementById('tableBody'); tbody.innerHTML = '';
         let timelineLabels = []; let chosenDataPoints = [];
 
         localDB.forEach((entry) => {
             timelineLabels.push(entry.time.split(',')[1] || entry.time);
             chosenDataPoints.push(entry[document.getElementById('chartTargetSelect').value]);
 
-            let rowHtml = `<tr><td><small class="text-muted">${entry.time}</small></td><td><b>${entry.user}</b></td><td><span class="badge bg-secondary">${entry.shift}</span></td>`;
+            let rowHtml = `<tr><td><small>${entry.time}</small></td><td><b>${entry.user}</b></td><td><span class="badge bg-secondary">${entry.shift}</span></td>`;
             for (let key in caseSchema) {
-                let temp = entry[key];
-                rowHtml += `<td class="${determineStatusClass(temp, caseSchema[key])}">${temp}°F</td>`;
+                rowHtml += `<td class="${determineStatusClass(entry[key], caseSchema[key])}">${entry[key]}°F</td>`;
             }
-            tbody.innerHTML += rowHtml + '</tr>';
+            rowHtml += `<td><small>${entry.actions_taken || ""}</small></td><td><small>${entry.inspector_notes || ""}</small></td></tr>`;
+            tbody.innerHTML += rowHtml;
         });
 
         if (localDB.length > 0) {
             updateAnalyticsLinePlot(timelineLabels, chosenDataPoints, caseSchema[document.getElementById('chartTargetSelect').value].label, caseSchema[document.getElementById('chartTargetSelect').value]);
-        }
-    }
-
-    function clearData() {
-        if(confirm("Dangerous Action: Confirm wipe of entire log history?")) {
-            localStorage.removeItem('tempLogDataExpanded'); localDB = [];
-            renderSystemView(); syncLatestFromCloud(); resetWizardState();
         }
     }
 
@@ -573,25 +604,18 @@
             data: {
                 labels: labels,
                 datasets: [{
-                    label: `${labelName} Curve Line History`, data: data,
-                    borderColor: '#0d6efd', backgroundColor: 'rgba(13, 110, 253, 0.08)',
-                    fill: true, tension: 0.15, borderWidth: 3, pointRadius: 4
+                    label: `${labelName} History`, data: data,
+                    borderColor: '#0d6efd', backgroundColor: 'rgba(13, 110, 253, 0.08)', fill: true, tension: 0.15
                 }]
             },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { y: { suggestedMin: limits.min - 5, suggestedMax: limits.max + 5, grid: { color: 'rgba(0,0,0,0.05)' } } }
-            }
+            options: { responsive: true, maintainAspectRatio: false }
         });
     }
 
     window.onload = function() {
         localDB = JSON.parse(localStorage.getItem('tempLogDataExpanded')) || [];
-        initializeStructure();
-        renderSystemView();
-        syncLatestFromCloud();
+        initializeStructure(); renderSystemView(); syncLatestFromCloud();
     };
 </script>
-
 </body>
 </html>
