@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Five Star Refrigeration Check System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f4f6f9; font-family: system-ui, -apple-system, sans-serif; }
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        
+        /* 3-Tier Alert System Colors */
+        .status-green { background-color: #d1e7dd !important; color: #0f5132 !important; }
+        .status-yellow { background-color: #fff3cd !important; color: #664d03 !important; }
+        .status-red { background-color: #f8d7da !important; color: #842029 !important; font-weight: bold !important; }
+        
+        /* Missing Field Error State */
+        .field-error { border: 2px dashed #dc3545 !important; background-color: #fff5f5 !important; }
+
+        /* Status Light Dots */
+        .status-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        .dot-red { background-color: #dc3545; box-shadow: 0 0 6px #dc3545; }
+        .dot-yellow { background-color: #ffc107; box-shadow: 0 0 6px #ffc107; }
+        .dot-green { background-color: #198754; box-shadow: 0 0 6px #198754; }
+        .dot-gray { background-color: #6c757d; }
+
+        .scroll-table { max-height: 250px; overflow-y: auto; }
+        
+        .section-block { border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; margin-bottom: 15px; background: white; }
+        .section-confirmed { border-left: 5px solid #198754; background-color: #f8fffb; }
+        .section-has-error { border-left: 5px solid #dc3545; background-color: #fffafd; }
+        
+        .inline-action-box { background-color: #fff; border: 1px solid #dc3545; border-radius: 4px; padding: 12px; margin-top: 10px; }
+        
+        /* Layout Grid for Dashboard Badge Units */
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+        .dashboard-badge { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
+        <div>
+            <h2 class="mb-0">Five Star Refrigeration</h2>
+            <small>Interactive Section Validation & Real-Time Two-Way PC Sheet Sync</small>
+        </div>
+        <span class="badge bg-primary fs-6" id="liveClock"></span>
+    </div>
+
+    <div class="card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+            <h4 class="text-secondary mb-0">🚨 Live System Status (Cloud Synced Database)</h4>
+            <span class="text-muted small" id="latestLogMeta">Fetching live spreadsheet entries...</span>
+        </div>
+        <div class="dashboard-grid" id="fullWidthStatusDashboard"></div>
+    </div>
+
+    <div class="row">
+        <div class="col-12 col-xl-6">
+            <div class="card p-4">
+                <h4 class="text-secondary border-bottom pb-2 mb-3">📝 Digital Temp Log Sheet</h4>
+                <form id="masterForm" novalidate>
+                    
+                    <div class="row mb-4 bg-light p-3 rounded border">
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Inspector Initials</label>
+                            <input type="text" id="initials" class="form-control" placeholder="e.g. RM" oninput="lockSubmissionOnChanges()">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Shift Window</label>
+                            <select id="shift" class="form-control" onchange="lockSubmissionOnChanges()">
+                                <option value="" disabled selected>Select Shift...</option>
+                                <option value="7-8AM">7-8 AM Shift</option>
+                                <option value="3PM">3 PM Shift</option>
+                                <option value="9PM">9 PM Shift</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="wizardSectionsContainer">
+                        
+                        <div class="section-block" id="block-sec1">
+                            <h5 class="fw-bold text-primary mb-3">🥛 1. Dairy / Refrigerated (31°F - 40°F)</h5>
+                            <div class="row g-2">
+                                <div class="col-6"><label class="small">Shredded Cheese</label><input type="number" data-key="shredded_cheese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Cottage Cheese</label><input type="number" data-key="cottage_cheese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Yogurt</label><input type="number" data-key="yogurt" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Biscuits</label><input type="number" data-key="biscuits" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Butter</label><input type="number" data-key="butter" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Eggs</label><input type="number" data-key="eggs" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Juice</label><input type="number" data-key="juice" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Milk</label><input type="number" data-key="milk" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                            </div>
+                            <div class="dynamic-action-area mt-3" id="actions-sec1"></div>
+                        </div>
+
+                        <div class="section-block" id="block-sec2">
+                            <h5 class="fw-bold text-primary mb-3">🍦 2. Ice Cream / Frozen (-10°F - 10°F)</h5>
+                            <div class="row g-2">
+                                <div class="col-4"><label class="small">Ice Cream Pails</label><input type="number" data-key="ice_cream_pails" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Ice Cream Squares</label><input type="number" data-key="ice_cream_squares" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Ice Cream Novelties</label><input type="number" data-key="ice_cream_novelties" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                            </div>
+                            <div class="dynamic-action-area mt-3" id="actions-sec2"></div>
+                        </div>
+
+                        <div class="section-block" id="block-sec3">
+                            <h5 class="fw-bold text-primary mb-3">📦 3. Frozen / Prepared Foods (-10°F - 10°F)</h5>
+                            <div class="row g-2">
+                                <div class="col-6"><label class="small">Garlic Bread</label><input type="number" data-key="garlic_bread" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Chinese</label><input type="number" data-key="chinese" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Dessert</label><input type="number" data-key="dessert" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Breakfast</label><input type="number" data-key="breakfast" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Bulk Items</label><input type="number" data-key="bulk_items" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Frozen Potatoes</label><input type="number" data-key="frozen_potatoes" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Vegetable</label><input type="number" data-key="vegetable" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Stouffers</label><input type="number" data-key="stouffers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Banquet</label><input type="number" data-key="banquet" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Lean Cuisine</label><input type="number" data-key="lean_cuisine" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Pizza</label><input type="number" data-key="pizza" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Pizza Rolls</label><input type="number" data-key="pizza_rolls" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Burritos</label><input type="number" data-key="burritos" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Meat (Frozen)</label><input type="number" data-key="meat_frozen" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Breaded Fish</label><input type="number" data-key="breaded_fish" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Frozen Bakery</label><input type="number" data-key="frozen_bakery" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                            </div>
+                            <div class="dynamic-action-area mt-3" id="actions-sec3"></div>
+                        </div>
+
+                        <div class="section-block" id="block-sec4">
+                            <h5 class="fw-bold text-primary mb-3">🥩 4. Fresh Meat / Seafood (32°F - 38°F)</h5>
+                            <div class="row g-2">
+                                <div class="col-6"><label class="small">Meat Fish</label><input type="number" data-key="meat_fish" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Meat Chicken</label><input type="number" data-key="meat_chicken" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Fresh Grinds</label><input type="number" data-key="fresh_grinds" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-6"><label class="small">Johnsonville Case</label><input type="number" data-key="johnsonville_case" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                            </div>
+                            <div class="dynamic-action-area mt-3" id="actions-sec4"></div>
+                        </div>
+
+                        <div class="section-block" id="block-sec5">
+                            <h5 class="fw-bold text-primary mb-3">🥪 5. Deli / Lunchmeat (31°F - 40°F)</h5>
+                            <div class="row g-2">
+                                <div class="col-4"><label class="small">Deli Salads</label><input type="number" data-key="deli_salads" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Lunchmeat Bacon</label><input type="number" data-key="lunchmeat_bacon" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Lunchmeat</label><input type="number" data-key="lunchmeat" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                            </div>
+                            <div class="dynamic-action-area mt-3" id="actions-sec5"></div>
+                        </div>
+
+                        <div class="section-block" id="block-sec6">
+                            <h5 class="fw-bold text-primary mb-3">🍎 6. Produce (32°F - 55°F)</h5>
+                            <div class="row g-2">
+                                <div class="col-4"><label class="small">Produce Lettuce</label><input type="number" data-key="produce_lettuce" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Peppers</label><input type="number" data-key="peppers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Cucumbers</label><input type="number" data-key="cucumbers" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Salad Mix</label><input type="number" data-key="salad_mix" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Apples</label><input type="number" data-key="apples" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                                <div class="col-4"><label class="small">Strawberries</label><input type="number" data-key="strawberries" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this)"></div>
+                            </div>
+                            <div class="dynamic-action-area mt-3" id="actions-sec6"></div>
+                        </div>
+                    </div>
+
+                    <button type="button" id="validateFormBtn" class="btn btn-primary w-100 mt-4 py-2 shadow-sm fw-bold fs-5">🔍 Validate Worksheet & Check Alerts</button>
+
+                    <button type="button" id="finalSubmitBtn" disabled class="btn btn-secondary w-100 mt-2 py-3 shadow-sm fw-bold fs-5">🔒 Complete Log & Submit to Sheet</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="card p-3" style="height: 332px;">
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                    <h5 class="text-secondary mb-0">📈 Micro-Trend Analysis Line Graph</h5>
+                    <select id="chartTargetSelect" class="form-select form-select-sm" onchange="renderSystemView()" style="width: 160px;"></select>
+                </div>
+                <div style="position: relative; height:240px; width:100%">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card p-4">
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                    <h4 class="text-secondary mb-0">📊 Master Spreadsheet Backend</h4>
+                    <button class="btn btn-outline-danger btn-sm" onclick="clearData()">Clear Local Database</button>
+                </div>
+                <div class="table-responsive scroll-table">
+                    <table class="table table-bordered text-center align-middle small" id="dataTable">
+                        <thead class="table-dark sticky-top" id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbzafYhCYTH0RpKyDbqXPkjmlumfFW2oRkVaq0VCRO5q0g0U7JXZ67QC-T35dasaDqk8/exec";
+
+    const caseSchema = {
+        shredded_cheese:     { label: "Shredded Cheese",   min: 31, max: 40, sec: "sec1" },
+        cottage_cheese:      { label: "Cottage Cheese",    min: 31, max: 40, sec: "sec1" },
+        yogurt:              { label: "Yogurt",            min: 31, max: 40, sec: "sec1" },
+        biscuits:            { label: "Biscuits",          min: 31, max: 40, sec: "sec1" },
+        butter:              { label: "Butter",            min: 31, max: 40, sec: "sec1" },
+        eggs:                { label: "Eggs",              min: 31, max: 40, sec: "sec1" },
+        juice:               { label: "Juice",             min: 31, max: 40, sec: "sec1" },
+        milk:                { label: "Milk",              min: 31, max: 40, sec: "sec1" },
+        ice_cream_pails:     { label: "Ice Cream Pails",   min: -10, max: 10, sec: "sec2" },
+        ice_cream_squares:   { label: "Ice Cream Squares", min: -10, max: 10, sec: "sec2" },
+        ice_cream_novelties: { label: "Ice Cream Novelties",min: -10, max: 10, sec: "sec2" },
+        garlic_bread:        { label: "Garlic Bread",      min: -10, max: 10, sec: "sec3" },
+        chinese:             { label: "Chinese",           min: -10, max: 10, sec: "sec3" },
+        dessert:             { label: "Dessert",           min: -10, max: 10, sec: "sec3" },
+        breakfast:           { label: "Breakfast",         min: -10, max: 10, sec: "sec3" },
+        bulk_items:          { label: "Bulk Items",        min: -10, max: 10, sec: "sec3" },
+        frozen_potatoes:     { label: "Frozen Potatoes",   min: -10, max: 10, sec: "sec3" },
+        vegetable:           { label: "Vegetable",         min: -10, max: 10, sec: "sec3" },
+        stouffers:           { label: "Stouffers",         min: -10, max: 10, sec: "sec3" },
+        banquet:             { label: "Banquet",           min: -10, max: 10, sec: "sec3" },
+        lean_cuisine:        { label: "Lean Cuisine",      min: -10, max: 10, sec: "sec3" },
+        pizza:               { label: "Pizza",             min: -10, max: 10, sec: "sec3" },
+        pizza_rolls:         { label: "Pizza Rolls",       min: -10, max: 10, sec: "sec3" },
+        burritos:            { label: "Burritos",          min: -10, max: 10, sec: "sec3" },
+        meat_frozen:         { label: "Meat (Frozen)",     min: -10, max: 10, sec: "sec3" },
+        breaded_fish:        { label: "Breaded Fish",      min: -10, max: 10, sec: "sec3" },
+        frozen_bakery:       { label: "Frozen Bakery",     min: -10, max: 10, sec: "sec3" },
+        meat_fish:           { label: "Meat Fish",         min: 32, max: 38, sec: "sec4" },
+        meat_chicken:        { label: "Meat Chicken",      min: 32, max: 38, sec: "sec4" },
+        fresh_grinds:        { label: "Fresh Grinds",      min: 32, max: 38, sec: "sec4" },
+        johnsonville_case:   { label: "Johnsonville Case", min: 32, max: 38, sec: "sec4" },
+        deli_salads:         { label: "Deli Salads",       min: 31, max: 40, sec: "sec5" },
+        lunchmeat_bacon:     { label: "Lunchmeat Bacon",   min: 31, max: 40, sec: "sec5" },
+        lunchmeat:           { label: "Lunchmeat",         min: 31, max: 40, sec: "sec5" },
+        produce_lettuce:     { label: "Produce Lettuce",   min: 32, max: 55, sec: "sec6" },
+        peppers:             { label: "Peppers",           min: 32, max: 55, sec: "sec6" },
+        cucumbers:           { label: "Cucumbers",         min: 32, max: 55, sec: "sec6" },
+        salad_mix:           { label: "Salad Mix",         min: 32, max: 55, sec: "sec6" },
+        apples:              { label: "Apples",            min: 32, max: 55, sec: "sec6" },
+        strawberries:        { label: "Strawberries",      min: 32, max: 55, sec: "sec6" }
+    };
+
+    const wizardOrder = ["sec1", "sec2", "sec3", "sec4", "sec5", "sec6"];
+    let localDB = [];
+    let cloudLastRowData = null;
+    let trendChartInstance = null;
+    let globalActiveActionsArray = [];
+
+    setInterval(() => {
+        document.getElementById('liveClock').innerText = new Date().toLocaleString();
+    }, 1000);
+
+    function determineStatusClass(value, limits) {
+        if (isNaN(value) || value === null || value === "") return "";
+        if (value < limits.min || value > limits.max) return "status-red";
+        if (value <= (limits.min + 2) || value >= (limits.max - 2)) return "status-yellow";
+        return "status-green";
+    }
+
+    function evaluateFieldStyle(inputElement) {
+        const key = inputElement.getAttribute('data-key');
+        const value = parseFloat(inputElement.value);
+        if (!isNaN(value)) {
+            inputElement.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
+            inputElement.classList.add(determineStatusClass(value, caseSchema[key]));
+        }
+        lockSubmissionOnChanges();
+    }
+
+    function lockSubmissionOnChanges() {
+        const submitBtn = document.getElementById('finalSubmitBtn');
+        if (!submitBtn.disabled) {
+            submitBtn.disabled = true;
+            submitBtn.classList.replace('btn-success', 'btn-secondary');
+        }
+    }
+
+    function resetWizardState() {
+        wizardOrder.forEach((sec) => {
+            const block = document.getElementById("block-" + sec);
+            document.getElementById("actions-" + sec).innerHTML = "";
+            block.classList.remove('section-confirmed', 'section-has-error');
+        });
+        document.querySelectorAll('input[data-key]').forEach(input => {
+            input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
+        });
+        lockSubmissionOnChanges();
+    }
+
+    // THE WORKSHEET VALIDATOR
+    document.getElementById('validateFormBtn').addEventListener('click', function() {
+        const initials = document.getElementById('initials').value.trim();
+        const shift = document.getElementById('shift').value;
+        if (!initials || !shift) { 
+            alert("⚠️ Missing Fields: Please complete Inspector Initials and Shift Window selection."); 
+            return; 
+        }
+
+        // MEMORY RECALL: Read all currently checked boxes right now before wiping containers
+        let selectedMemoryCache = {};
+        document.querySelectorAll('.action-checkbox-node:checked').forEach(cb => {
+            const cooler = cb.getAttribute('data-cooler');
+            const val = cb.value;
+            if (!selectedMemoryCache[cooler]) selectedMemoryCache[cooler] = [];
+            selectedMemoryCache[cooler].push(val);
+        });
+
+        let formHasMissingFields = false;
+        let redAlertsBySection = { sec1: [], sec2: [], sec3: [], sec4: [], sec5: [], sec6: [] };
+
+        // Clean previous status styling labels
+        wizardOrder.forEach(sec => {
+            document.getElementById("block-" + sec).classList.remove('section-confirmed', 'section-has-error');
+            document.getElementById("actions-" + sec).innerHTML = "";
+        });
+
+        // Scan all numerical fields
+        const allInputs = document.querySelectorAll('input[data-key]');
+        allInputs.forEach(input => {
+            input.classList.remove('field-error');
+            const key = input.getAttribute('data-key');
+            const value = input.value.trim();
+            const sectionId = caseSchema[key].sec;
+
+            if (value === "") {
+                input.classList.add('field-error');
+                document.getElementById("block-" + sectionId).classList.add('section-has-error');
+                formHasMissingFields = true;
+            } else {
+                let numVal = parseFloat(value);
+                if (determineStatusClass(numVal, caseSchema[key]) === "status-red") {
+                    redAlertsBySection[sectionId].push({ key: key, label: caseSchema[key].label, val: numVal });
+                }
+            }
+        });
+
+        if (formHasMissingFields) {
+            // Re-render whatever layout fields we can down below so checkbox entries don't vanish visually
+            renderAlertBoxes(redAlertsBySection, selectedMemoryCache);
+            alert("⚠️ Missing Fields: Please complete all empty highlighted fields across categories.");
+            return;
+        }
+
+        let totalRedSpikes = renderAlertBoxes(redAlertsBySection, selectedMemoryCache);
+
+        if (totalRedSpikes > 0) {
+            alert(`⚠️ Action Required: Detected ${totalRedSpikes} out-of-spec temperature entry/entries.\n\nCorrective action checkboxes have been updated. Please ensure at least one box is checked for each flagged unit.`);
+            
+            // Unlocks submission button for compliance evaluation parsing
+            const submitBtn = document.getElementById('finalSubmitBtn');
+            submitBtn.disabled = false;
+            submitBtn.classList.replace('btn-secondary', 'btn-success');
+            return;
+        }
+
+        // Clean slate run
+        alert("✅ Form successfully validated! All parameters are within normal spec boundaries. Submission gate is unlocked.");
+        globalActiveActionsArray = [];
+        const submitBtn = document.getElementById('finalSubmitBtn');
+        submitBtn.disabled = false;
+        submitBtn.classList.replace('btn-secondary', 'btn-success');
+    });
+
+    // Sub-routine logic to output dynamic alert wrapper rows onto view layouts
+    function renderAlertBoxes(redAlertsBySection, selectedMemoryCache) {
+        let totalRedSpikes = 0;
+
+        for (let secId in redAlertsBySection) {
+            const block = document.getElementById("block-" + secId);
+            const actionArea = document.getElementById("actions-" + secId);
+
+            if (redAlertsBySection[secId].length > 0) {
+                totalRedSpikes += redAlertsBySection[secId].length;
+                block.classList.add('section-has-error');
+
+                let actionHtml = `<div class="inline-action-box">
+                    <h6 class="text-danger fw-bold mb-2">🚨 Out-of-Range Incidents (Corrective Action Options Required Below):</h6>`;
+                
+                redAlertsBySection[secId].forEach(alertItem => {
+                    actionHtml += `<div class="mb-2 pb-2 border-bottom alert-protocol-wrapper" data-alert-cooler="${alertItem.key}">
+                        <span class="badge bg-danger mb-1">${alertItem.label}: ${alertItem.val}°F</span>
+                        <div class="row g-1">`;
+                    
+                    ["Moved Product to Back-of-House Cooler","Moved Product to Back-of-House Freezer","Placed Unit into Defrost Mode","Scheduled Temperature Recheck for 1 Hour","Contacted Company for Service Call","Contacted Company for Emergency Service","Notified Management Team","Checked Rack for Active Alarms"].forEach((act, idx) => {
+                        // Check if memory has this option marked previously
+                        let isChecked = (selectedMemoryCache[alertItem.key] && selectedMemoryCache[alertItem.key].includes(act)) ? "checked" : "";
+                        
+                        actionHtml += `<div class="col-6">
+                            <div class="form-check">
+                                <input class="form-check-input action-checkbox-node" type="checkbox" ${isChecked} data-cooler="${alertItem.key}" data-label="${alertItem.label}" value="${act}" id="chk-${alertItem.key}-${idx}">
+                                <label class="form-check-label text-dark" style="font-size:10px;" for="chk-${alertItem.key}-${idx}">${act}</label>
+                            </div>
+                        </div>`;
+                    });
+                    actionHtml += `</div></div>`;
+                });
+                actionHtml += `</div>`;
+                actionArea.innerHTML = actionHtml;
+            } else {
+                // If there were no missing rows flagged, label as confirmed completely
+                if(!block.classList.contains('section-has-error')) {
+                    block.classList.add('section-confirmed');
+                }
+            }
+        }
+        return totalRedSpikes;
+    }
+
+    // FINAL SUBMISSION CHECK GATE
+    document.getElementById('finalSubmitBtn').addEventListener('click', function() {
+        const submitBtn = document.getElementById('finalSubmitBtn');
+        const alertWrappers = document.querySelectorAll('.alert-protocol-wrapper');
+        let validationFailed = false;
+        globalActiveActionsArray = [];
+
+        alertWrappers.forEach(container => {
+            const checkedBoxes = container.querySelectorAll('.action-checkbox-node:checked');
+            
+            if (checkedBoxes.length === 0) {
+                validationFailed = true;
+                container.style.border = "2px solid #dc3545";
+                container.style.backgroundColor = "#fff0f0";
+            } else {
+                container.style.border = "none";
+                container.style.backgroundColor = "transparent";
+                let coolerLabel = checkedBoxes[0].getAttribute('data-label');
+                let measures = Array.from(checkedBoxes).map(cb => cb.value).join(" | ");
+                globalActiveActionsArray.push(`${coolerLabel}: [${measures}]`);
+            }
+        });
+
+        if (validationFailed) {
+            alert(`⚠️ SUBMISSION REFUSED:\n\nYou must select at least one corrective action choice for all highlighted critical red items before the cloud database sync can continue.`);
+            return;
+        }
+
+        executeCloudPublish();
+    });
+
+    function executeCloudPublish() {
+        const submitBtn = document.getElementById('finalSubmitBtn');
+        submitBtn.disabled = true; submitBtn.innerText = "⏳ Uploading to Cloud...";
+
+        const newRecord = {
+            time: new Date().toLocaleString(),
+            user: document.getElementById('initials').value.toUpperCase(),
+            shift: document.getElementById('shift').value,
+            actions_taken: globalActiveActionsArray.length > 0 ? globalActiveActionsArray.join("; ") : "None Required"
+        };
+        for (let key in caseSchema) {
+            newRecord[key] = parseFloat(document.querySelector(`input[data-key="${key}"]`).value);
+        }
+
+        fetch(cloudSpreadsheetURL, {
+            method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newRecord)
+        })
+        .then(() => {
+            localDB.push(newRecord);
+            localStorage.setItem('tempLogDataExpanded', JSON.stringify(localDB));
+            document.getElementById('masterForm').reset();
+            resetWizardState();
+            renderSystemView();
+            syncLatestFromCloud();
+            alert("🚀 Log entry securely published to cloud ledger spreadsheet rows!");
+        })
+        .catch(err => {
+            alert("Upload failure. Saved locally onto device clipboards: " + err);
+            submitBtn.disabled = false; submitBtn.innerText = "Retry Submission Sync";
+        });
+    }
+
+    function initializeStructure() {
+        const select = document.getElementById('chartTargetSelect');
+        const thead = document.getElementById('tableHead');
+        select.innerHTML = ''; let headHtml = '<tr><th>Timestamp</th><th>By</th><th>Shift</th>';
+        for (let key in caseSchema) {
+            let option = document.createElement('option'); option.value = key; option.innerText = caseSchema[key].label;
+            select.appendChild(option); headHtml += `<th>${caseSchema[key].label}</th>`;
+        }
+        thead.innerHTML = headHtml + '</tr>'; select.value = 'milk';
+    }
+
+    function syncLatestFromCloud() {
+        const metaLabel = document.getElementById('latestLogMeta');
+        metaLabel.innerText = "🔄 Pulling live metrics from spreadsheet tower...";
+
+        fetch(cloudSpreadsheetURL)
+        .then(response => response.json())
+        .then(res => {
+            if (res.status === "success") {
+                cloudLastRowData = res.data;
+                metaLabel.innerText = `Last Logged: Shift ${cloudLastRowData.shift} by ${cloudLastRowData.user} on ${cloudLastRowData.time}`;
+                renderDashboardLights(cloudLastRowData);
+            } else {
+                metaLabel.innerText = "⚠️ Cloud Empty: No baseline logs found inside spreadsheet columns.";
+                renderDashboardLights(null);
+            }
+        })
+        .catch(err => {
+            metaLabel.innerText = "⚠️ Network Offline: Displaying local fallback records cache.";
+            if(localDB.length > 0) renderDashboardLights(localDB[localDB.length - 1]);
+            else renderDashboardLights(null);
+        });
+    }
+
+    function renderDashboardLights(targetRow) {
+        const statusDashboard = document.getElementById('fullWidthStatusDashboard');
+        statusDashboard.innerHTML = '';
+
+        for (let key in caseSchema) {
+            let limits = caseSchema[key];
+            let valueText = "N/A"; let lightClass = "dot-gray";
+
+            if (targetRow && targetRow[key] !== undefined && targetRow[key] !== "") {
+                let actualVal = parseFloat(targetRow[key]);
+                valueText = `${actualVal}°F`;
+                let statusClass = determineStatusClass(actualVal, limits);
+                if (statusClass === "status-red") lightClass = "dot-red";
+                else if (statusClass === "status-yellow") lightClass = "dot-yellow";
+                else if (statusClass === "status-green") lightClass = "dot-green";
+            }
+
+            statusDashboard.innerHTML += `
+                <div class="dashboard-badge shadow-sm">
+                    <div class="text-truncate me-1" style="max-width:130px;" title="${limits.label}">
+                        <span class="status-dot ${lightClass}"></span><span class="fw-semibold">${limits.label}</span>
+                    </div><span class="fw-bold text-secondary">${valueText}</span>
+                </div>`;
+        }
+    }
+
+    function renderSystemView() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        let timelineLabels = []; let chosenDataPoints = [];
+
+        localDB.forEach((entry) => {
+            timelineLabels.push(entry.time.split(',')[1] || entry.time);
+            chosenDataPoints.push(entry[document.getElementById('chartTargetSelect').value]);
+
+            let rowHtml = `<tr><td><small class="text-muted">${entry.time}</small></td><td><b>${entry.user}</b></td><td><span class="badge bg-secondary">${entry.shift}</span></td>`;
+            for (let key in caseSchema) {
+                let temp = entry[key];
+                rowHtml += `<td class="${determineStatusClass(temp, caseSchema[key])}">${temp}°F</td>`;
+            }
+            tbody.innerHTML += rowHtml + '</tr>';
+        });
+
+        if (localDB.length > 0) {
+            updateAnalyticsLinePlot(timelineLabels, chosenDataPoints, caseSchema[document.getElementById('chartTargetSelect').value].label, caseSchema[document.getElementById('chartTargetSelect').value]);
+        }
+    }
+
+    function clearData() {
+        if(confirm("Dangerous Action: Confirm wipe of entire log history?")) {
+            localStorage.removeItem('tempLogDataExpanded'); localDB = [];
+            renderSystemView(); syncLatestFromCloud(); resetWizardState();
+        }
+    }
+
+    function updateAnalyticsLinePlot(labels, data, labelName, limits) {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        if (trendChartInstance) trendChartInstance.destroy();
+        trendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: `${labelName} Curve Line History`, data: data,
+                    borderColor: '#0d6efd', backgroundColor: 'rgba(13, 110, 253, 0.08)',
+                    fill: true, tension: 0.15, borderWidth: 3, pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { suggestedMin: limits.min - 5, suggestedMax: limits.max + 5, grid: { color: 'rgba(0,0,0,0.05)' } } }
+            }
+        });
+    }
+
+    window.onload = function() {
+        localDB = JSON.parse(localStorage.getItem('tempLogDataExpanded')) || [];
+        initializeStructure();
+        renderSystemView();
+        syncLatestFromCloud();
+    };
+</script>
+
+</body>
+</html>
