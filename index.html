@@ -108,11 +108,11 @@
                     <div class="row mb-4 bg-light p-3 rounded border">
                         <div class="col-6">
                             <label class="form-label fw-bold">Inspector Initials</label>
-                            <input type="text" id="initials" class="form-control" placeholder="e.g. RM" oninput="lockSubmissionOnChanges()">
+                            <input type="text" id="initials" class="form-control" placeholder="e.g. RM" oninput="saveDraftProgressData()">
                         </div>
                         <div class="col-6">
                             <label class="form-label fw-bold">Shift Window</label>
-                            <select id="shift" class="form-control" onchange="lockSubmissionOnChanges()">
+                            <select id="shift" class="form-control" onchange="saveDraftProgressData()">
                                 <option value="" disabled selected>Select Shift Window...</option>
                                 <option value="7-8AM">7-8 AM Shift (6AM-9AM)</option>
                                 <option value="3PM">3 PM Shift (2PM-5PM)</option>
@@ -126,7 +126,7 @@
 
                     <div class="bg-light p-3 rounded border mb-3">
                         <label class="form-label fw-bold text-secondary">📋 Freehand Inspector Shift Notes</label>
-                        <textarea id="freehandNotes" class="form-control" rows="2" placeholder="Enter custom log observations or rack notes..."></textarea>
+                        <textarea id="freehandNotes" class="form-control" rows="2" placeholder="Enter custom log observations or rack notes..." oninput="saveDraftProgressData()"></textarea>
                     </div>
 
                     <button type="button" id="validateFormBtn" onclick="runStageOneValidation()" class="btn btn-primary w-100 mt-2 py-2 shadow-sm fw-bold fs-5">🔍 Step 1: Validate Floor Sheet</button>
@@ -170,6 +170,7 @@
             inputElement.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
             inputElement.classList.add(determineStatusClass(value, limitsSchema[sectionId]));
         }
+        saveDraftProgressData(); // Auto-save on every character typed
         lockSubmissionOnChanges();
     }
 
@@ -177,6 +178,54 @@
         document.getElementById('finalSubmitBtn').disabled = true;
         document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
         document.getElementById('validateActionsBtn').style.display = "none";
+    }
+
+    // AUTO-SAVING RECOVERY CORE: Saves layout state data to physical drive memory cache
+    function saveDraftProgressData() {
+        if (!isInspectionActive) return;
+        
+        let draft = {
+            initials: document.getElementById('initials').value,
+            shift: document.getElementById('shift').value,
+            freehandNotes: document.getElementById('freehandNotes').value,
+            temperatures: {},
+            checkboxes: runtimeCheckboxStateMemory
+        };
+        
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            draft.temperatures[input.getAttribute('data-name')] = input.value;
+        });
+        
+        localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
+    }
+
+    // AUTO-SAVING RECOVERY CORE: Inspects disk memory cache for saved state data to auto-fill
+    function loadSavedDraftProgressData() {
+        let rawDraft = localStorage.getItem('five_star_active_draft_session');
+        if (!rawDraft) return;
+        
+        let draft = JSON.parse(rawDraft);
+        isInspectionActive = true;
+        clearInterval(backgroundRefreshPollerId);
+        
+        document.getElementById('initials').value = draft.initials || "";
+        document.getElementById('shift').value = draft.shift || "";
+        document.getElementById('freehandNotes').value = draft.freehandNotes || "";
+        runtimeCheckboxStateMemory = draft.checkboxes || {};
+        
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            let name = input.getAttribute('data-name');
+            if (draft.temperatures[name] !== undefined) {
+                input.value = draft.temperatures[name];
+                evaluateFieldStyle(input, input.getAttribute('data-sec'));
+            }
+        });
+        
+        // Transform the UI control knobs to active logging states
+        document.getElementById('masterForm').classList.remove('form-locked-state');
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        sessionBtn.innerText = "🛑 Cancel & Reset Route";
+        sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
     }
 
     function toggleKioskFormInterlock() {
@@ -202,17 +251,12 @@
                     targetForm.classList.remove('form-locked-state');
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
                     sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-                    alert("✅ Background refresh frozen. Form unlocked. You may begin your entries safely.");
+                    saveDraftProgressData(); // Initialize draft snapshot anchor line
                 }
-            }).catch(() => {
-                isInspectionActive = false;
-                startAutomaticDashboardPolling();
-                sessionBtn.innerText = "🟢 Start New Inspection Route";
-                sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
-                alert("❌ Cloud connection timeout error. Form reset to safety mode.");
             });
         } else {
-            if (confirm("Are you sure you want to cancel? This will clear all temperatures typed on this screen.")) {
+            if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
+                localStorage.removeItem('five_star_active_draft_session'); // Vaporize draft cache file
                 forceSessionShutdownReset();
             }
         }
@@ -221,6 +265,7 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
+        localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         
@@ -248,6 +293,13 @@
                 activeStructuralMap = res.structural_schema;
                 if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                
+                // If a localized session state file is recovered, trigger automated field populations
+                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
+                    renderDynamicFormElements(res.structural_schema);
+                    loadSavedDraftProgressData();
+                }
+                
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
         });
@@ -283,6 +335,7 @@
             }
             runtimeCheckboxStateMemory[coolerKey][val] = cb.checked;
         });
+        saveDraftProgressData(); // Mirror checkboxes to storage draft immediately
     }
 
     function navigateHistory(direction) {
@@ -402,14 +455,12 @@
                         actionHtml += `<div class="mb-2 pb-2 border-bottom alert-protocol-wrapper" data-alert-type="${status === 'status-red' ? 'CRITICAL-ALERT' : 'CAUTION-RECHECK'}" data-cooler="${assetName}">
                             <span class="badge ${status === 'status-red' ? 'bg-danger' : 'bg-warning text-dark'} mb-1">${assetName}: ${num}°F</span>
                             <div class="row g-1">`;
-                        
                         if (status === "status-yellow") {
                             actionHtml += `<div class="col-12"><div class="form-check">
                                 <input class="form-check-input action-checkbox-node" type="checkbox" checked data-cooler-key="${assetName}" value="Rechecking in 1 Hour" id="chk-${assetName}-recheck">
                                 <label class="form-check-label text-dark fw-bold" style="font-size:11px;" for="chk-${assetName}-recheck">Rechecking in 1 Hour (Enforced Compliance)</label>
                             </div></div>`;
                         } else {
-                            // INTEGRATED: Your 8 custom protocol options mapped cleanly onto the checkbox loop
                             [
                                 "Moved Product to Cooler",
                                 "Moved Product to Freezer",
