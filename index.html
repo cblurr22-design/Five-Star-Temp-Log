@@ -470,9 +470,9 @@
             }
         }
         
-        if (labelsTimeline.length > 10) {
-            labelsTimeline = labelsTimeline.slice(-10);
-            dataPointsPlot = dataPointsPlot.slice(-10);
+        if (labelsTimeline.length > 100) {
+            labelsTimeline = labelsTimeline.slice(-100);
+            dataPointsPlot = dataPointsPlot.slice(-100);
         }
         
         if (dataPointsPlot.length === 0) { alert("📊 No numerical historical metrics tracked yet for: " + assetName); return; }
@@ -484,7 +484,7 @@
         // FIXED RESOLUTION VECTOR: Unbind old handlers and force calculation rules after animation settles completely
         $(targetModalNode).off('shown.bs.modal');
         $(targetModalNode).on('shown.bs.modal', function () {
-            document.getElementById('trendModalTitle').innerText = `📈 10-Check Operational Trend Matrix: ${assetName}`;
+            document.getElementById('trendModalTitle').innerText = `📈 100-Check Operational Trend Matrix: ${assetName}`;
             
             if (globalChartInstanceReference) { globalChartInstanceReference.destroy(); }
             
