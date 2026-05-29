@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Five Star Refrigeration Check System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #f4f6f9; font-family: system-ui, -apple-system, sans-serif; }
         .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
@@ -22,7 +23,8 @@
         .section-has-error { border-left: 5px solid #dc3545; background-color: #fffafd; }
         .inline-action-box { background-color: #fff; border: 1px solid #dc3545; border-radius: 4px; padding: 12px; margin-top: 10px; }
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-        .dashboard-badge { display: flex; flex-direction: column; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; }
+        .dashboard-badge { display: flex; flex-direction: column; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .dashboard-badge:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important; border-color: #0d6efd; }
         .dashboard-badge.badge-danger-alert { border: 2px solid #dc3545; background-color: #fff8f8; }
         .dashboard-badge.badge-warning-alert { border: 2px solid #ffc107; background-color: #fffff2; }
         .badge-action-text { font-size: 10px; font-style: italic; margin-top: 4px; border-top: 1px dashed #dee2e6; padding-top: 4px; }
@@ -33,7 +35,6 @@
         .live-indicator { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
         .form-locked-state { opacity: 0.4; pointer-events: none; }
         .alert-item-container { scroll-margin-top: 80px; padding: 6px; border-radius: 4px; transition: background-color 0.3s; }
-        /* Weather subtitle display helper rule */
         .weather-meta-text { font-size: 11px; font-weight: bold; color: #0d6efd; display: block; margin-top: 2px; }
     </style>
 </head>
@@ -43,7 +44,7 @@
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
             <h2 class="mb-0">Five Star Refrigeration Engine</h2>
-            <small>Dynamic Self-Assembling Interface Layout Module</small>
+            <small>Dynamic Self-Assembling Interface Layout Module with Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
@@ -141,8 +142,24 @@
     </div>
 </div>
 
+<div class="modal fade" id="trendChartModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="trendModalTitle">Case Analysis Trendline Matrix</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-white p-4">
+                <div style="position: relative; height:340px; width:100%;">
+                    <canvas id="canvasTrendTrackerNode"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // FIXED: Synchronized endpoint location matching your verified deployment stream key
     const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbw9SCalE_Rvun2qlK0B1T3G8Ze7bVX2ftO_ZGuiyQHFdFSjeufYwPLRGTrzKuzdEGm_/exec";
 
     const limitsSchema = {
@@ -160,6 +177,7 @@
     let backgroundRefreshPollerId = null; 
     let isInspectionActive = false;
     let runtimeCheckboxStateMemory = {};
+    let globalChartInstanceReference = null; 
 
     function determineStatusClass(value, limits) {
         if (isNaN(value) || value === null || value === "") return "";
@@ -359,7 +377,6 @@
         pullSystemStructure();
     }
 
-    // FIXED: Unpacks background data parameters to extract and render ambient outdoor weather conditions
     function processDashboardViewUpdate(statusMap, isLiveCloudData, metaString) {
         let prefixText = isLiveCloudData ? "Last Logged: " : "Viewing Past Report: ";
         document.getElementById('latestLogMeta').innerText = `${prefixText}${metaString}`;
@@ -371,12 +388,11 @@
         for (let key in statusMap) {
             if (statusMap[key]) {
                 if (statusMap[key].notes_field) extractedNotes = statusMap[key].notes_field;
-                if (statusMap[key].outdoor_temp) extractedTemp = statusMap[key].outdoor_temp;
-                if (statusMap[key].weather_cond) extractedCond = statusMap[key].weather_cond;
+                if (statusMap[key].outdoor_temp && statusMap[key].outdoor_temp !== "N/A") extractedTemp = statusMap[key].outdoor_temp;
+                if (statusMap[key].weather_cond && statusMap[key].weather_cond !== "N/A") extractedCond = statusMap[key].weather_cond;
             }
         }
         
-        // Push strings safely to subtitle layout container text node
         document.getElementById('dashboardWeatherView').innerText = `Weather Knox (46534): ${extractedTemp} | ${extractedCond}`;
         document.getElementById('dashboardNotesView').innerText = "Notes: " + extractedNotes;
         renderDashboardLights(activeStructuralMap, statusMap);
@@ -390,25 +406,28 @@
             assets.forEach(assetName => {
                 let data = statusRecords[assetName] || { temp: "N/A", action: "" };
                 let lightClass = "dot-gray"; let alertClass = ""; let actionableTextDiv = "";
+                let valueText = "N/A";
                 
                 if (data.temp !== "N/A" && data.temp !== undefined && data.temp !== "") {
                     let actualVal = parseFloat(data.temp);
-                    let cls = determineStatusClass(actualVal, limitsSchema[secId]);
-                    if (cls === "status-red") { 
-                        lightClass = "dot-red"; alertClass = "badge-danger-alert"; 
-                        let actText = data.action || "Action Logged";
-                        actionableTextDiv = `<div class="badge-action-text text-red-alert">🛠️ ${actText}</div>`;
+                    if (!isNaN(actualVal)) {
+                        let cls = determineStatusClass(actualVal, limitsSchema[secId]);
+                        if (cls === "status-red") { 
+                            lightClass = "dot-red"; alertClass = "badge-danger-alert"; 
+                            let actText = data.action || "Action Logged";
+                            actionableTextDiv = `<div class="badge-action-text text-red-alert">🛠️ ${actText}</div>`;
+                        }
+                        else if (cls === "status-yellow") { 
+                            lightClass = "dot-yellow"; alertClass = "badge-warning-alert"; 
+                            let actText = data.action || "Rechecking in 1 Hour";
+                            actionableTextDiv = `<div class="badge-action-text text-yellow-alert">⏳ ${actText}</div>`;
+                        }
+                        else if (cls === "status-green") { lightClass = "dot-green"; }
+                        valueText = `${actualVal}°F`;
                     }
-                    else if (cls === "status-yellow") { 
-                        lightClass = "dot-yellow"; alertClass = "badge-warning-alert"; 
-                        let actText = data.action || "Rechecking in 1 Hour";
-                        actionableTextDiv = `<div class="badge-action-text text-yellow-alert">⏳ ${actText}</div>`;
-                    }
-                    else if (cls === "status-green") { lightClass = "dot-green"; }
-                    valueText = `${actualVal}°F`;
-                } else { valueText = "N/A"; }
+                }
                 
-                dashboard.innerHTML += `<div class="dashboard-badge shadow-sm ${alertClass}">
+                dashboard.innerHTML += `<div class="dashboard-badge shadow-sm ${alertClass}" onclick="launchTrendDiagnosticsWindow('${assetName.replace(/'/g, "\\'")}', '${secId}')">
                     <div class="d-flex justify-content-between align-items-center w-100">
                         <div class="text-truncate" style="max-width:140px;">
                             <span class="status-dot ${lightClass}"></span><span class="fw-semibold">${assetName}</span>
@@ -419,6 +438,110 @@
                 </div>`;
             });
         }
+    }
+
+    // FIXED HOOK EVENT: Enforces a structural delay to allow the layout engine animation to finish rendering before drawing metrics
+    function launchTrendDiagnosticsWindow(assetName, sectionId) {
+        if (!localCacheHistory || localCacheHistory.length === 0) { alert("📊 Insufficient historical entries recorded in cache."); return; }
+        
+        let targetLimits = limitsSchema[sectionId];
+        let labelsTimeline = [];
+        let dataPointsPlot = [];
+        let dataCount = 0;
+        
+        for (let i = 0; i < localCacheHistory.length; i++) {
+            let recordBlock = localCacheHistory[i];
+            if (recordBlock.status_map && recordBlock.status_map[assetName]) {
+                let entryData = recordBlock.status_map[assetName];
+                if (entryData.temp !== "N/A" && entryData.temp !== undefined && entryData.temp !== "") {
+                    let rawVal = parseFloat(entryData.temp);
+                    if (!isNaN(rawVal)) {
+                        let cleanTimeLabel = "Check " + (dataCount + 1);
+                        if (recordBlock.meta_string && recordBlock.meta_string.includes("on ")) {
+                            let parts = recordBlock.meta_string.split("on ");
+                            let shiftPart = recordBlock.meta_string.split("Shift ")[1] ? recordBlock.meta_string.split("Shift ")[1].split(" ")[0] : "";
+                            cleanTimeLabel = parts[1].split(",")[0] + " (" + shiftPart + ")";
+                        }
+                        labelsTimeline.push(cleanTimeLabel);
+                        dataPointsPlot.push(rawVal);
+                        dataCount++;
+                    }
+                }
+            }
+        }
+        
+        if (labelsTimeline.length > 10) {
+            labelsTimeline = labelsTimeline.slice(-10);
+            dataPointsPlot = dataPointsPlot.slice(-10);
+        }
+        
+        if (dataPointsPlot.length === 0) { alert("📊 No numerical historical metrics tracked yet for: " + assetName); return; }
+        
+        // Launch Modal Window Frame Instantly
+        let targetModalNode = document.getElementById('trendChartModal');
+        let modalInstance = bootstrap.Modal.getInstance(targetModalNode) || new bootstrap.Modal(targetModalNode);
+        
+        // FIXED RESOLUTION VECTOR: Unbind old handlers and force calculation rules after animation settles completely
+        $(targetModalNode).off('shown.bs.modal');
+        $(targetModalNode).on('shown.bs.modal', function () {
+            document.getElementById('trendModalTitle').innerText = `📈 10-Check Operational Trend Matrix: ${assetName}`;
+            
+            if (globalChartInstanceReference) { globalChartInstanceReference.destroy(); }
+            
+            const ctx = document.getElementById('canvasTrendTrackerNode').getContext('2d');
+            globalChartInstanceReference = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsTimeline,
+                    datasets: [
+                        {
+                            label: 'Asset Reading (°F)',
+                            data: dataPointsPlot,
+                            borderColor: '#0d6efd',
+                            backgroundColor: 'rgba(13, 110, 253, 0.08)',
+                            borderWidth: 3,
+                            tension: 0.2,
+                            pointRadius: 5,
+                            pointBackgroundColor: '#0d6efd',
+                            fill: true
+                        },
+                        {
+                            label: 'Max Limit (' + targetLimits.max + '°F)',
+                            data: Array(labelsTimeline.length).fill(targetLimits.max),
+                            borderColor: '#dc3545',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Min Limit (' + targetLimits.min + '°F)',
+                            data: Array(labelsTimeline.length).fill(targetLimits.min),
+                            borderColor: '#198754',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', labels: { font: { size: 11, weight: 'bold' } } } },
+                    scales: {
+                        y: {
+                            ticks: { callback: function(v) { return v + '°F'; }, font: { weight: 'bold' } },
+                            suggestedMin: Math.min(...dataPointsPlot, targetLimits.min) - 3,
+                            suggestedMax: Math.max(...dataPointsPlot, targetLimits.max) + 3
+                        },
+                        x: { ticks: { font: { size: 9, weight: 'semibold' } } }
+                    }
+                }
+            });
+        });
+        
+        modalInstance.show();
     }
 
     function runStageOneValidation() {
@@ -627,5 +750,6 @@
         startAutomaticDashboardPolling(); 
     };
 </script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </body>
 </html>
