@@ -33,6 +33,8 @@
         .live-indicator { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
         .form-locked-state { opacity: 0.4; pointer-events: none; }
         .alert-item-container { scroll-margin-top: 80px; padding: 6px; border-radius: 4px; transition: background-color 0.3s; }
+        /* Weather subtitle display helper rule */
+        .weather-meta-text { font-size: 11px; font-weight: bold; color: #0d6efd; display: block; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -57,9 +59,10 @@
                 </div>
                 <span id="dashboardModeIndicator" class="badge bg-success live-indicator">● Real-Time Cloud</span>
             </div>
-            <div class="text-end" style="max-width: 45%;">
-                <span class="text-muted d-block small mb-1 fw-semibold" id="latestLogMeta">Fetching entries...</span>
-                <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Logged</span>
+            <div class="text-end" style="max-width: 50%;">
+                <span class="text-muted d-block small mb-0 fw-semibold" id="latestLogMeta">Fetching entries...</span>
+                <span class="weather-meta-text" id="dashboardWeatherView">Weather Knox (46534): Syncing...</span>
+                <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6 mt-2" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Logged</span>
             </div>
         </div>
         <div class="dashboard-grid" id="fullWidthStatusDashboard">Loading active floor metrics configuration...</div>
@@ -139,7 +142,8 @@
 </div>
 
 <script>
-    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbzRmclZTiSPNpgdAAPey58Lf7opzlJCx_dyc0mCUwSLlzPxorY9GGMa8LG8tHfzhjXF/exec";
+    // FIXED: Synchronized endpoint location matching your verified deployment stream key
+    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbw9SCalE_Rvun2qlK0B1T3G8Ze7bVX2ftO_ZGuiyQHFdFSjeufYwPLRGTrzKuzdEGm_/exec";
 
     const limitsSchema = {
         sec1: { title: "🥛 1. Dairy / Refrigerated", min: 31, max: 40 },
@@ -170,7 +174,7 @@
             inputElement.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
             inputElement.classList.add(determineStatusClass(value, limitsSchema[sectionId]));
         }
-        saveDraftProgressData(); // Auto-save on every character typed
+        saveDraftProgressData(); 
         lockSubmissionOnChanges();
     }
 
@@ -180,10 +184,8 @@
         document.getElementById('validateActionsBtn').style.display = "none";
     }
 
-    // AUTO-SAVING RECOVERY CORE: Saves layout state data to physical drive memory cache
     function saveDraftProgressData() {
         if (!isInspectionActive) return;
-        
         let draft = {
             initials: document.getElementById('initials').value,
             shift: document.getElementById('shift').value,
@@ -191,19 +193,15 @@
             temperatures: {},
             checkboxes: runtimeCheckboxStateMemory
         };
-        
         document.querySelectorAll('input[data-sec]').forEach(input => {
             draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
-        
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
-    // AUTO-SAVING RECOVERY CORE: Inspects disk memory cache for saved state data to auto-fill
     function loadSavedDraftProgressData() {
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
         if (!rawDraft) return;
-        
         let draft = JSON.parse(rawDraft);
         isInspectionActive = true;
         clearInterval(backgroundRefreshPollerId);
@@ -221,7 +219,6 @@
             }
         });
         
-        // Transform the UI control knobs to active logging states
         document.getElementById('masterForm').classList.remove('form-locked-state');
         const sessionBtn = document.getElementById('kioskSessionBtn');
         sessionBtn.innerText = "🛑 Cancel & Reset Route";
@@ -251,12 +248,12 @@
                     targetForm.classList.remove('form-locked-state');
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
                     sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-                    saveDraftProgressData(); // Initialize draft snapshot anchor line
+                    saveDraftProgressData(); 
                 }
             });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                localStorage.removeItem('five_star_active_draft_session'); // Vaporize draft cache file
+                localStorage.removeItem('five_star_active_draft_session'); 
                 forceSessionShutdownReset();
             }
         }
@@ -294,7 +291,6 @@
                 if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 
-                // If a localized session state file is recovered, trigger automated field populations
                 if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
                     renderDynamicFormElements(res.structural_schema);
                     loadSavedDraftProgressData();
@@ -335,7 +331,7 @@
             }
             runtimeCheckboxStateMemory[coolerKey][val] = cb.checked;
         });
-        saveDraftProgressData(); // Mirror checkboxes to storage draft immediately
+        saveDraftProgressData(); 
     }
 
     function navigateHistory(direction) {
@@ -363,17 +359,25 @@
         pullSystemStructure();
     }
 
+    // FIXED: Unpacks background data parameters to extract and render ambient outdoor weather conditions
     function processDashboardViewUpdate(statusMap, isLiveCloudData, metaString) {
         let prefixText = isLiveCloudData ? "Last Logged: " : "Viewing Past Report: ";
         document.getElementById('latestLogMeta').innerText = `${prefixText}${metaString}`;
         
         let extractedNotes = "None Logged";
+        let extractedTemp = "N/A";
+        let extractedCond = "N/A";
+        
         for (let key in statusMap) {
-            if (statusMap[key] && statusMap[key].notes_field) {
-                extractedNotes = statusMap[key].notes_field;
-                break;
+            if (statusMap[key]) {
+                if (statusMap[key].notes_field) extractedNotes = statusMap[key].notes_field;
+                if (statusMap[key].outdoor_temp) extractedTemp = statusMap[key].outdoor_temp;
+                if (statusMap[key].weather_cond) extractedCond = statusMap[key].weather_cond;
             }
         }
+        
+        // Push strings safely to subtitle layout container text node
+        document.getElementById('dashboardWeatherView').innerText = `Weather Knox (46534): ${extractedTemp} | ${extractedCond}`;
         document.getElementById('dashboardNotesView').innerText = "Notes: " + extractedNotes;
         renderDashboardLights(activeStructuralMap, statusMap);
     }
