@@ -23,7 +23,7 @@
         .section-has-error { border-left: 5px solid #dc3545; background-color: #fffafd; }
         .inline-action-box { background-color: #fff; border: 1px solid #dc3545; border-radius: 4px; padding: 12px; margin-top: 10px; }
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-        .dashboard-badge { display: flex; flex-direction: column; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .dashboard-badge { display: flex; flex-direction: column; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; -webkit-tap-highlight-color: transparent; }
         .dashboard-badge:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important; border-color: #0d6efd; }
         .dashboard-badge.badge-danger-alert { border: 2px solid #dc3545; background-color: #fff8f8; }
         .dashboard-badge.badge-warning-alert { border: 2px solid #ffc107; background-color: #fffff2; }
@@ -36,6 +36,14 @@
         .form-locked-state { opacity: 0.4; pointer-events: none; }
         .alert-item-container { scroll-margin-top: 80px; padding: 6px; border-radius: 4px; transition: background-color 0.3s; }
         .weather-meta-text { font-size: 11px; font-weight: bold; color: #0d6efd; display: block; margin-top: 2px; }
+        
+        .active-walkway-focus {
+            background-color: #e6f2ff !important;
+            border: 2px solid #0d6efd !important;
+            border-radius: 6px;
+            transform: scale(1.01);
+            transition: all 0.2s ease-in-out;
+        }
     </style>
 </head>
 <body>
@@ -44,7 +52,7 @@
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
             <h2 class="mb-0">Five Star Refrigeration Engine</h2>
-            <small>Dynamic Self-Assembling Interface Layout Module with Trend Diagnostics</small>
+            <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
@@ -160,15 +168,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbw9SCalE_Rvun2qlK0B1T3G8Ze7bVX2ftO_ZGuiyQHFdFSjeufYwPLRGTrzKuzdEGm_/exec";
+    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbxtvM-NZJKzEH_4BD7hOxpLOSvcKIMYP7MHzJg_eq4wlDfWeZK816PruNejlfy3BQnE/exec";
 
     const limitsSchema = {
-        sec1: { title: "🥛 1. Dairy / Refrigerated", min: 31, max: 40 },
-        sec2: { title: "🍦 2. Ice Cream / Frozen", min: -10, max: 10 },
-        sec3: { title: "📦 3. Frozen Prepared Foods", min: -10, max: 10 },
-        sec4: { title: "🥩 4. Fresh Meat / Seafood", min: 32, max: 38 },
-        sec5: { title: "🥪 5. Deli / Lunchmeat Cases", min: 31, max: 40 },
-        sec6: { title: "🍎 6. Fresh Produce Displays", min: 32, max: 55 }
+        sec1: { title: "🥛 1. Dairy / Refrigerated", min: 28.5, max: 40 },
+        sec2: { title: "🍦 2. Ice Cream / Frozen", min: -15, max: 10 },
+        sec3: { title: "📦 3. Frozen Prepared Foods", min: -15, max: 10 },
+        sec4: { title: "🥩 4. Fresh Meat / Seafood", min: 28, max: 38 },
+        sec5: { title: "🥪 5. Deli / Lunchmeat Cases", min: 28, max: 40 },
+        sec6: { title: "🍎 6. Fresh Produce Displays", min: 30, max: 55 }
     };
 
     let activeStructuralMap = {};
@@ -178,11 +186,17 @@
     let isInspectionActive = false;
     let runtimeCheckboxStateMemory = {};
     let globalChartInstanceReference = null; 
+    
+    let appleGlobalPendingAsset = "";
+    let appleGlobalPendingLimits = null;
+
+    let rawCloudSequenceMap = {}; 
+    let calculatedSequenceArray = [];
 
     function determineStatusClass(value, limits) {
         if (isNaN(value) || value === null || value === "") return "";
         if (value < limits.min || value > limits.max) return "status-red";
-        if (value <= (limits.min + 2) || value >= (limits.max - 2)) return "status-yellow";
+        if (value >= (limits.max - 1.5) || value <= (limits.min + 0.5)) return "status-yellow";
         return "status-green";
     }
 
@@ -260,6 +274,13 @@
             .then(res => {
                 if (res.status === "success") {
                     activeStructuralMap = res.structural_schema;
+                    
+                    // Unified sequence packet handler mapped straight to API response keys
+                    if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
+                    else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
+                    else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
+                    else rawCloudSequenceMap = {};
+                    
                     renderDynamicFormElements(res.structural_schema);
                     if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                     
@@ -267,6 +288,8 @@
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
                     sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
                     saveDraftProgressData(); 
+                    
+                    setTimeout(focusInitialWalkwayElement, 500);
                 }
             });
         } else {
@@ -306,6 +329,11 @@
         .then(res => {
             if (res.status === "success") {
                 activeStructuralMap = res.structural_schema;
+                
+                if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
+                else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
+                else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
+                
                 if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 
@@ -322,6 +350,7 @@
     function renderDynamicFormElements(schema) {
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
+        
         for (let secId in limitsSchema) {
             let assets = schema[secId] || [];
             if (assets.length === 0) continue;
@@ -332,11 +361,119 @@
                 let identifier = `${secId}_${idx}`;
                 html += `<div class="col-6 alert-item-container" id="container-${identifier}">
                     <label class="small fw-semibold text-muted d-block text-truncate">${asset}</label>
-                    <input type="number" data-sec="${secId}" data-name="${asset}" id="input-${identifier}" class="form-control form-control-sm" step="0.1" oninput="evaluateFieldStyle(this, '${secId}')">
+                    <input type="number" 
+                           data-sec="${secId}" 
+                           data-name="${asset}" 
+                           id="input-${identifier}" 
+                           class="form-control form-control-sm walkway-input-node" 
+                           step="0.1" 
+                           inputmode="decimal">
                 </div>`;
             });
             html += `</div><div class="dynamic-action-area mt-3" id="actions-${secId}"></div></div>`;
             container.innerHTML += html;
+        }
+
+        rebuildDynamicCloudSequenceArray();
+    }
+
+    /*
+       ========================================================================
+       🚀 CLIENT-SIDE LOCAL ROUTING ENGINE (FALLBACK REINFORCED)
+       ========================================================================
+    */
+    function rebuildDynamicCloudSequenceArray() {
+        calculatedSequenceArray = Array.from(document.querySelectorAll('.walkway-input-node'));
+        
+        // Safety Verification: If the cloud dictionary is totally blank, scrape the page order instantly
+        let useCloudSort = Object.keys(rawCloudSequenceMap).length > 0;
+        
+        if (useCloudSort) {
+            calculatedSequenceArray.sort((a, b) => {
+                let nameA = a.getAttribute('data-name');
+                let nameB = b.getAttribute('data-name');
+                
+                let rawOrderA = 9999;
+                let rawOrderB = 9999;
+                
+                if (rawCloudSequenceMap[nameA] !== undefined) rawOrderA = rawCloudSequenceMap[nameA];
+                if (rawCloudSequenceMap[nameB] !== undefined) rawOrderB = rawCloudSequenceMap[nameB];
+                
+                let orderA = (rawOrderA === "" || rawOrderA === null || isNaN(parseFloat(rawOrderA))) ? 9999 : parseFloat(rawOrderA);
+                let orderB = (rawOrderB === "" || rawOrderB === null || isNaN(parseFloat(rawOrderB))) ? 9999 : parseFloat(rawOrderB);
+                
+                return orderA - orderB;
+            });
+        }
+
+        // Apply programmatic sequential tracking listeners onto each elements vector row
+        calculatedSequenceArray.forEach((input, index) => {
+            input.setAttribute('data-walk-index', index);
+            
+            // Purge previous bindings to cleanly separate active event states
+            input.removeEventListener('keydown', handleWalkwayKeyboardInterception);
+            input.removeEventListener('focus', handleWalkwayFocusHighlighter);
+            input.removeEventListener('blur', handleWalkwayBlurClearer);
+            input.removeEventListener('input', handleNativeInputOverride);
+            
+            // Re-apply master walkthrough pipeline listeners
+            input.addEventListener('keydown', handleWalkwayKeyboardInterception);
+            input.addEventListener('focus', handleWalkwayFocusHighlighter);
+            input.addEventListener('blur', handleWalkwayBlurClearer);
+            input.addEventListener('input', handleNativeInputOverride);
+        });
+    }
+
+    function handleNativeInputOverride(e) {
+        evaluateFieldStyle(e.target, e.target.getAttribute('data-sec'));
+    }
+
+    function focusInitialWalkwayElement() {
+        if (calculatedSequenceArray.length > 0) {
+            calculatedSequenceArray[0].focus();
+        }
+    }
+
+    function handleWalkwayFocusHighlighter(e) {
+        const inputId = e.target.id;
+        const containerId = inputId.replace('input-', 'container-');
+        const containerNode = document.getElementById(containerId);
+        if (containerNode) containerNode.classList.add('active-walkway-focus');
+    }
+
+    function handleWalkwayBlurClearer(e) {
+        const inputId = e.target.id;
+        const containerId = inputId.replace('input-', 'container-');
+        const containerNode = document.getElementById(containerId);
+        if (containerNode) containerNode.classList.remove('active-walkway-focus');
+    }
+
+    /*
+       ========================================================================
+       🎮 MASTER KEYBOARD NAVIGATION HARDWARE INTERCEPTOR
+       ========================================================================
+    */
+    function handleWalkwayKeyboardInterception(e) {
+        // Catches regular Enter, carriage return keys, and PC hardware numpad Enter codes (13)
+        if (e.key === 'Enter' || e.keyCode === 13) {
+            e.preventDefault(); 
+            e.stopPropagation(); // Block other framework handlers from hijacking the keystroke
+            
+            const currentIndex = parseInt(e.target.getAttribute('data-walk-index'));
+            const nextIndex = currentIndex + 1;
+            
+            if (nextIndex < calculatedSequenceArray.length) {
+                const nextTargetInput = calculatedSequenceArray[nextIndex];
+                
+                // Force focus tracking array jump
+                nextTargetInput.focus();
+                nextTargetInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                e.target.blur();
+                const validateBtn = document.getElementById('validateFormBtn');
+                if (validateBtn) validateBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                alert("🏁 Walkthrough complete! Click 'Step 1: Validate Floor Sheet' to verify your data.");
+            }
         }
     }
 
@@ -440,110 +577,6 @@
         }
     }
 
-    // FIXED HOOK EVENT: Enforces a structural delay to allow the layout engine animation to finish rendering before drawing metrics
-    function launchTrendDiagnosticsWindow(assetName, sectionId) {
-        if (!localCacheHistory || localCacheHistory.length === 0) { alert("📊 Insufficient historical entries recorded in cache."); return; }
-        
-        let targetLimits = limitsSchema[sectionId];
-        let labelsTimeline = [];
-        let dataPointsPlot = [];
-        let dataCount = 0;
-        
-        for (let i = 0; i < localCacheHistory.length; i++) {
-            let recordBlock = localCacheHistory[i];
-            if (recordBlock.status_map && recordBlock.status_map[assetName]) {
-                let entryData = recordBlock.status_map[assetName];
-                if (entryData.temp !== "N/A" && entryData.temp !== undefined && entryData.temp !== "") {
-                    let rawVal = parseFloat(entryData.temp);
-                    if (!isNaN(rawVal)) {
-                        let cleanTimeLabel = "Check " + (dataCount + 1);
-                        if (recordBlock.meta_string && recordBlock.meta_string.includes("on ")) {
-                            let parts = recordBlock.meta_string.split("on ");
-                            let shiftPart = recordBlock.meta_string.split("Shift ")[1] ? recordBlock.meta_string.split("Shift ")[1].split(" ")[0] : "";
-                            cleanTimeLabel = parts[1].split(",")[0] + " (" + shiftPart + ")";
-                        }
-                        labelsTimeline.push(cleanTimeLabel);
-                        dataPointsPlot.push(rawVal);
-                        dataCount++;
-                    }
-                }
-            }
-        }
-        
-        if (labelsTimeline.length > 100) {
-            labelsTimeline = labelsTimeline.slice(-100);
-            dataPointsPlot = dataPointsPlot.slice(-100);
-        }
-        
-        if (dataPointsPlot.length === 0) { alert("📊 No numerical historical metrics tracked yet for: " + assetName); return; }
-        
-        // Launch Modal Window Frame Instantly
-        let targetModalNode = document.getElementById('trendChartModal');
-        let modalInstance = bootstrap.Modal.getInstance(targetModalNode) || new bootstrap.Modal(targetModalNode);
-        
-        // FIXED RESOLUTION VECTOR: Unbind old handlers and force calculation rules after animation settles completely
-        $(targetModalNode).off('shown.bs.modal');
-        $(targetModalNode).on('shown.bs.modal', function () {
-            document.getElementById('trendModalTitle').innerText = `📈 100-Check Operational Trend Matrix: ${assetName}`;
-            
-            if (globalChartInstanceReference) { globalChartInstanceReference.destroy(); }
-            
-            const ctx = document.getElementById('canvasTrendTrackerNode').getContext('2d');
-            globalChartInstanceReference = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labelsTimeline,
-                    datasets: [
-                        {
-                            label: 'Asset Reading (°F)',
-                            data: dataPointsPlot,
-                            borderColor: '#0d6efd',
-                            backgroundColor: 'rgba(13, 110, 253, 0.08)',
-                            borderWidth: 3,
-                            tension: 0.2,
-                            pointRadius: 5,
-                            pointBackgroundColor: '#0d6efd',
-                            fill: true
-                        },
-                        {
-                            label: 'Max Limit (' + targetLimits.max + '°F)',
-                            data: Array(labelsTimeline.length).fill(targetLimits.max),
-                            borderColor: '#dc3545',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false
-                        },
-                        {
-                            label: 'Min Limit (' + targetLimits.min + '°F)',
-                            data: Array(labelsTimeline.length).fill(targetLimits.min),
-                            borderColor: '#198754',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top', labels: { font: { size: 11, weight: 'bold' } } } },
-                    scales: {
-                        y: {
-                            ticks: { callback: function(v) { return v + '°F'; }, font: { weight: 'bold' } },
-                            suggestedMin: Math.min(...dataPointsPlot, targetLimits.min) - 3,
-                            suggestedMax: Math.max(...dataPointsPlot, targetLimits.max) + 3
-                        },
-                        x: { ticks: { font: { size: 9, weight: 'semibold' } } }
-                    }
-                }
-            });
-        });
-        
-        modalInstance.show();
-    }
-
     function runStageOneValidation() {
         const initials = document.getElementById('initials').value.trim();
         const shift = document.getElementById('shift').value;
@@ -596,7 +629,8 @@
                                 "Scheduled Emergency Service",
                                 "Notified Management Team",
                                 "Checked Rack for Alarms see notes",
-                                "Rechecking in 1 Hour"
+                                "Rechecking in 1 Hour",
+                                "No Action Taken"
                             ].forEach((act, idx) => {
                                 let isCheckedState = (runtimeCheckboxStateMemory[assetName] && runtimeCheckboxStateMemory[assetName][act] === true) ? "checked" : "";
                                 actionHtml += `<div class="col-6"><div class="form-check">
@@ -750,6 +784,5 @@
         startAutomaticDashboardPolling(); 
     };
 </script>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </body>
 </html>
