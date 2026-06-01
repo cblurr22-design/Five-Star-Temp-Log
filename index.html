@@ -44,6 +44,17 @@
             transform: scale(1.01);
             transition: all 0.2s ease-in-out;
         }
+
+        @media (max-width: 1024px) {
+            .section-block h5 { font-size: 1.45rem !important; margin-bottom: 1rem !important; }
+            .alert-item-container label { font-size: 14px !important; font-weight: 700 !important; color: #111111 !important; }
+            .walkway-input-node { font-size: 22px !important; height: 52px !important; font-weight: bold !important; }
+            .dashboard-badge { font-size: 14px !important; padding: 14px !important; }
+            .dashboard-badge .fw-bold { font-size: 17px !important; }
+            .form-label, #freehandNotes, .form-control { font-size: 1.2rem !important; }
+            .form-check-label { font-size: 13px !important; font-weight: 600 !important; padding-left: 6px; }
+            .form-check-input { width: 1.4em !important; height: 1.4em !important; margin-top: 0.15em !important; }
+        }
     </style>
 </head>
 <body>
@@ -124,7 +135,7 @@
                         </div>
                         <div class="col-6">
                             <label class="form-label fw-bold">Shift Window</label>
-                            <select id="shift" class="form-control" onchange="saveDraftProgressData()">
+                            <select id="shift" class="form-control" onchange="handleShiftSelectionContextChange()">
                                 <option value="" disabled selected>Select Shift Window...</option>
                                 <option value="7-8AM">7-8 AM Shift (6AM-9AM)</option>
                                 <option value="3PM">3 PM Shift (2PM-5PM)</option>
@@ -195,12 +206,12 @@
 
     let clientObservedTemp = "72°F";
     let clientObservedCond = "Clear Sky";
+    
+    // Cached map reference to evaluate recheck autofills
+    let activeDashboardMemoryCache = {};
 
-    /*
-       ========================================================================
-       🛡️ REINFORCED ISOLATED WEATHER HANDSHAKE NODE
-       ========================================================================
-    */
+    let absoluteLastSyncTimestampMemory = Date.now();
+
     function updateLiveClockAndWeather() {
         const now = new Date();
         document.getElementById('liveClock').innerText = now.toLocaleString();
@@ -244,6 +255,8 @@
         if (!isNaN(value)) {
             inputElement.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
             inputElement.classList.add(determineStatusClass(value, limitsSchema[sectionId]));
+        } else {
+            inputElement.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
         }
         saveDraftProgressData(); 
         lockSubmissionOnChanges();
@@ -253,6 +266,69 @@
         document.getElementById('finalSubmitBtn').disabled = true;
         document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
         document.getElementById('validateActionsBtn').style.display = "none";
+    }
+
+    /*
+       ========================================================================
+       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM Core
+       ========================================================================
+    */
+    function handleShiftSelectionContextChange() {
+        saveDraftProgressData();
+        const selectedShiftValue = document.getElementById('shift').value;
+        
+        // Loop through every input field to verify compliance thresholds
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            const assetName = input.getAttribute('data-name');
+            const sectionId = input.getAttribute('data-sec');
+            const limits = limitsSchema[sectionId];
+            
+            if (selectedShiftValue === "Recheck") {
+                // Pull down the case baseline from the cached real-time cloud tracking memory pack
+                const cachedData = activeDashboardMemoryCache[assetName];
+                
+                if (cachedData && cachedData.temp !== "N/A" && cachedData.temp !== "") {
+                    const priorTemperatureValue = parseFloat(cachedData.temp);
+                    if (!isNaN(priorTemperatureValue)) {
+                        const priorStatusClass = determineStatusClass(priorTemperatureValue, limits);
+                        
+                        // Condition A: If the case was completely safe (Green), autofill and flag verified
+                        if (priorStatusClass === "status-green") {
+                            input.value = priorTemperatureValue;
+                            evaluateFieldStyle(input, sectionId);
+                        } 
+                        // Condition B: If it crossed into caution/alert (Yellow/Red), wipe cell to force physical walk verify
+                        else {
+                            input.value = "";
+                            evaluateFieldStyle(input, sectionId);
+                        }
+                    }
+                } else {
+                    // Fallback configuration if zero records exist in cache ledger history
+                    input.value = "";
+                    evaluateFieldStyle(input, sectionId);
+                }
+            } else {
+                // Reset fields cleanly if toggling back to a standard inspection shift timeframe context
+                input.value = "";
+                evaluateFieldStyle(input, sectionId);
+            }
+        });
+        
+        saveDraftProgressData();
+        
+        // Dynamic Walkway sequence autofocus realignment: focuses the first blank alert box on the active recheck track
+        if (selectedShiftValue === "Recheck") {
+            setTimeout(() => {
+                for (let i = 0; i < calculatedSequenceArray.length; i++) {
+                    if (calculatedSequenceArray[i].value === "") {
+                        calculatedSequenceArray[i].focus();
+                        calculatedSequenceArray[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        break;
+                    }
+                }
+            }, 300);
+        }
     }
 
     function saveDraftProgressData() {
@@ -321,6 +397,7 @@
                     
                     renderDynamicFormElements(res.structural_schema);
                     if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                    if (res.current_status) activeDashboardMemoryCache = res.current_status;
                     
                     targetForm.classList.remove('form-locked-state');
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
@@ -351,14 +428,26 @@
         
         lockSubmissionOnChanges();
         pullSystemStructure();
+        
+        absoluteLastSyncTimestampMemory = Date.now();
         startAutomaticDashboardPolling(); 
     }
 
     function startAutomaticDashboardPolling() {
         clearInterval(backgroundRefreshPollerId);
+        
         backgroundRefreshPollerId = setInterval(() => {
-            if (!isInspectionActive && currentViewerIndex === -1) { pullSystemStructure(); }
-        }, 20000);
+            const rightNow = Date.now();
+            const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
+            
+            if (!isInspectionActive && currentViewerIndex === -1) {
+                if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
+                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
+                    absoluteLastSyncTimestampMemory = rightNow;
+                    pullSystemStructure(); 
+                }
+            }
+        }, 30000); 
     }
 
     function pullSystemStructure() {
@@ -374,6 +463,7 @@
                 
                 if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
                 if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
                     renderDynamicFormElements(res.structural_schema);
@@ -440,12 +530,12 @@
         calculatedSequenceArray.forEach((input, index) => {
             input.setAttribute('data-walk-index', index);
             
-            input.removeEventListener('keydown', handleWalkwayKeyboardInterception);
+            input.removeEventListener('keydown', handleWalkwayKeyboardInterration);
             input.removeEventListener('focus', handleWalkwayFocusHighlighter);
             input.removeEventListener('blur', handleWalkwayBlurClearer);
             input.removeEventListener('input', handleNativeInputOverride);
             
-            input.addEventListener('keydown', handleWalkwayKeyboardInterception);
+            input.addEventListener('keydown', handleWalkwayKeyboardInterration);
             input.addEventListener('focus', handleWalkwayFocusHighlighter);
             input.addEventListener('blur', handleWalkwayBlurClearer);
             input.addEventListener('input', handleNativeInputOverride);
@@ -476,7 +566,7 @@
         if (containerNode) containerNode.classList.remove('active-walkway-focus');
     }
 
-    function handleWalkwayKeyboardInterception(e) {
+    function handleWalkwayKeyboardInterration(e) {
         if (e.key === 'Enter' || e.keyCode === 13) {
             e.preventDefault(); 
             e.stopPropagation(); 
@@ -837,7 +927,9 @@
     function transmitLogsToCloud() {
         saveActiveCheckboxesToMemory();
         const submitBtn = document.getElementById('finalSubmitBtn');
-        submitBtn.disabled = true; submitBtn.innerText = "⏳ Synchronizing Log Stream...";
+        submitBtn.disabled = true; 
+        submitBtn.innerText = "⏳ Synchronizing Log Stream...";
+        
         let package = [];
         let sharedNotes = document.getElementById('freehandNotes').value.trim() || "None Logged";
         
@@ -864,7 +956,8 @@
         });
 
         fetch(cloudSpreadsheetURL, {
-            method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
                 routing_action: "SUBMIT_DATA_STREAM",
                 time: new Date().toLocaleString(),
@@ -878,6 +971,10 @@
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
             forceSessionShutdownReset(); 
+        }).catch(err => {
+            alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
+            submitBtn.disabled = false;
+            submitBtn.innerText = "🔒 Complete Log & Submit to Sheet";
         });
     }
 
@@ -890,7 +987,8 @@
         if (!confirm(`Commit configuration changes to the store layout?`)) return;
 
         fetch(cloudSpreadsheetURL, {
-            method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
                 routing_action: routingActionName,
                 target_section: section,
@@ -909,6 +1007,7 @@
     }
 
     window.onload = function() {
+        absoluteLastSyncTimestampMemory = Date.now();
         pullSystemStructure();
         startAutomaticDashboardPolling(); 
     };
