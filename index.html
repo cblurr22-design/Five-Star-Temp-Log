@@ -45,6 +45,7 @@
             transition: all 0.2s ease-in-out;
         }
 
+        /* 📱 HIGH-VISIBILITY SCALING RULES FOR MOBILE TABLETS/IPADS */
         @media (max-width: 1024px) {
             .section-block h5 { font-size: 1.45rem !important; margin-bottom: 1rem !important; }
             .alert-item-container label { font-size: 14px !important; font-weight: 700 !important; color: #111111 !important; }
@@ -207,9 +208,7 @@
     let clientObservedTemp = "72°F";
     let clientObservedCond = "Clear Sky";
     
-    // Cached map reference to evaluate recheck autofills
     let activeDashboardMemoryCache = {};
-
     let absoluteLastSyncTimestampMemory = Date.now();
 
     function updateLiveClockAndWeather() {
@@ -277,14 +276,12 @@
         saveDraftProgressData();
         const selectedShiftValue = document.getElementById('shift').value;
         
-        // Loop through every input field to verify compliance thresholds
         document.querySelectorAll('input[data-sec]').forEach(input => {
             const assetName = input.getAttribute('data-name');
             const sectionId = input.getAttribute('data-sec');
             const limits = limitsSchema[sectionId];
             
             if (selectedShiftValue === "Recheck") {
-                // Pull down the case baseline from the cached real-time cloud tracking memory pack
                 const cachedData = activeDashboardMemoryCache[assetName];
                 
                 if (cachedData && cachedData.temp !== "N/A" && cachedData.temp !== "") {
@@ -292,24 +289,19 @@
                     if (!isNaN(priorTemperatureValue)) {
                         const priorStatusClass = determineStatusClass(priorTemperatureValue, limits);
                         
-                        // Condition A: If the case was completely safe (Green), autofill and flag verified
                         if (priorStatusClass === "status-green") {
                             input.value = priorTemperatureValue;
                             evaluateFieldStyle(input, sectionId);
-                        } 
-                        // Condition B: If it crossed into caution/alert (Yellow/Red), wipe cell to force physical walk verify
-                        else {
+                        } else {
                             input.value = "";
                             evaluateFieldStyle(input, sectionId);
                         }
                     }
                 } else {
-                    // Fallback configuration if zero records exist in cache ledger history
                     input.value = "";
                     evaluateFieldStyle(input, sectionId);
                 }
             } else {
-                // Reset fields cleanly if toggling back to a standard inspection shift timeframe context
                 input.value = "";
                 evaluateFieldStyle(input, sectionId);
             }
@@ -317,7 +309,6 @@
         
         saveDraftProgressData();
         
-        // Dynamic Walkway sequence autofocus realignment: focuses the first blank alert box on the active recheck track
         if (selectedShiftValue === "Recheck") {
             setTimeout(() => {
                 for (let i = 0; i < calculatedSequenceArray.length; i++) {
@@ -599,14 +590,34 @@
         saveDraftProgressData(); 
     }
 
+    /*
+       ========================================================================
+       ⏮️ RE-ALIGNED CHRONOLOGICAL HISTORY NAVIGATION ENGINE
+       ========================================================================
+    */
     function navigateHistory(direction) {
         if (isInspectionActive) { alert("⚠️ Cannot browse history while an active inspection route is open."); return; }
         if (localCacheHistory.length === 0) { alert("📋 No logs discovered in database yet."); return; }
-        if (currentViewerIndex === -1) { currentViewerIndex = localCacheHistory.length - 1; } 
-        else { currentViewerIndex += direction; }
+        
+        // Step chronologically backwards to older blocks, or forwards to newer blocks
+        if (currentViewerIndex === -1) { 
+            currentViewerIndex = 0; 
+        } else { 
+            currentViewerIndex = currentViewerIndex - direction; 
+        }
 
-        if (currentViewerIndex >= localCacheHistory.length) { jumpToLiveStream(); return; }
-        if (currentViewerIndex < 0) { currentViewerIndex = 0; alert("⏮️ Reached oldest historical data row block."); return; }
+        // Forward Boundary: If navigating past the newest entry, return cleanly to live feed
+        if (currentViewerIndex < 0) { 
+            jumpToLiveStream(); 
+            return; 
+        }
+        
+        // Backward Boundary: If navigating past the oldest entry, keep focus locked on it
+        if (currentViewerIndex >= localCacheHistory.length) { 
+            currentViewerIndex = localCacheHistory.length - 1; 
+            alert("⏮️ Reached oldest historical data data block."); 
+            return; 
+        }
 
         const targetedRecord = localCacheHistory[currentViewerIndex];
         processDashboardViewUpdate(targetedRecord.status_map, false, targetedRecord.meta_string);
