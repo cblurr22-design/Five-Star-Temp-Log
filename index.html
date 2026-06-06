@@ -62,12 +62,13 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v8.1.0 (Callback Lock)</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v8.2.0 (Zero-Reset Build)</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
+    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -88,6 +89,7 @@
         <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard metrics.</div>
     </div>
 
+    <!-- Manager Asset Console -->
     <div class="card p-3 mb-4 bg-light border-warning">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="text-dark fw-bold mb-0">⚙️ Manager Asset Governance Console</h5>
@@ -122,6 +124,7 @@
         </div>
     </div>
 
+    <!-- Digital Input Worksheet Panel Area -->
     <div class="row">
         <div class="col-12 col-lg-7">
             <div class="card p-4 shadow-sm border-primary" style="border-width: 2px;">
@@ -312,7 +315,7 @@
 
     /*
        ========================================================================
-       🛡️ DETERMINISTIC SYNC HYDRATION (ZERO RENDERING GATES)
+       🛡️ SAFE EXCEPTION HYDRATION (TIMING GAP IMMUNE)
        ========================================================================
     */
     function loadSavedDraftProgressData() {
@@ -325,14 +328,12 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
 
-        // Hard reference verification step guarantees matching elements accept storage rows synchronously
         var liveInputsOnFloorMesh = document.querySelectorAll('input[data-sec]');
         if (liveInputsOnFloorMesh.length > 0) {
             liveInputsOnFloorMesh.forEach(input => {
                 let name = input.getAttribute('data-name');
                 if (draft.temperatures && draft.temperatures[name] !== undefined) {
                     input.value = draft.temperatures[name];
-                    // Strip old error borders and render field metrics safely
                     input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
                     input.classList.add(determineStatusClass(parseFloat(input.value), limitsSchema[input.getAttribute('data-sec')]));
                 }
@@ -388,13 +389,12 @@
                 if (res.display_order_map || res.sequence_map || res.walkway_sequence_map) {
                     let ord = res.display_order_map || res.sequence_map || res.walkway_sequence_map;
                     localStorage.setItem('five_star_hardware_order_map', JSON.stringify(ord));
-                    rawCloudSequenceMap = ord;
+                    rawCloudSequenceMap = ord || {};
                 }
 
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                // 🎯 PASSTHROUGH CALLBACK RESTORATION HANDSHAKE: Data recovery is chain-executed inside the rendering pipeline
                 renderDynamicFormElements(res.structural_schema, function() {
                     loadSavedDraftProgressData();
                 });
@@ -420,23 +420,34 @@
         let offlineMetaRaw = localStorage.getItem('five_star_meta_log') || "Cached Local Mirror";
         let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
 
-        if (offlineSchemaRaw) {
-            activeStructuralMap = JSON.parse(offlineSchemaRaw);
-            if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
-            if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
-            if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
+        // 🚨 Shield Array Null Allocations: Protect sorting arrays from throwing execution errors on wake
+        try {
+            rawCloudSequenceMap = offlineOrderRaw ? JSON.parse(offlineOrderRaw) : {};
+        } catch(e) {
+            rawCloudSequenceMap = {};
+        }
 
-            // 🎯 PASSTHROUGH CALLBACK RESTORATION HANDSHAKE ON BOOT/WAKE
-            renderDynamicFormElements(activeStructuralMap, function() {
-                loadSavedDraftProgressData();
-            });
-            processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
+        if (offlineSchemaRaw) {
+            try {
+                activeStructuralMap = JSON.parse(offlineSchemaRaw);
+                if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
+                if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
+
+                renderDynamicFormElements(activeStructuralMap, function() {
+                    loadSavedDraftProgressData();
+                });
+                processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
+            } catch(err) {
+                console.log("Cached storage read error occurred. Standing down profile parameters.");
+            }
         } else {
-            executeManualCloudSyncHandshake();
+            // 🛑 REMOVED NETWORK REBOOT FALLBACK: App stays 100% silent on wake and will never refresh the layout space automatically
+            document.getElementById('fullWidthStatusDashboard').innerText = 'Please click "Sync Cloud Database Structure" to download your store equipment maps for the first time.';
         }
     }
 
     function renderDynamicFormElements(schema, layoutCompletionCallback) {
+        if (!schema) return;
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
         
@@ -465,7 +476,6 @@
 
         rebuildDynamicCloudSequenceArray();
 
-        // 🛡️ Deterministic Paint Anchor: Fires callback explicitly after rendering context registers elements inside layout tree
         if (typeof layoutCompletionCallback === "function") {
             layoutCompletionCallback();
         }
@@ -473,16 +483,17 @@
 
     function rebuildDynamicCloudSequenceArray() {
         calculatedSequenceArray = Array.from(document.querySelectorAll('.walkway-input-node'));
-        let useCloudSort = Object.keys(rawCloudSequenceMap).length > 0;
+        let sortMap = rawCloudSequenceMap || {};
+        let useCloudSort = Object.keys(sortMap).length > 0;
         
         if (useCloudSort) {
             calculatedSequenceArray.sort((a, b) => {
                 let nameA = a.getAttribute('data-name');
                 let nameB = b.getAttribute('data-name');
-                let rawOrderA = 9999; let rawOrderB = 9999;
                 
-                if (rawCloudSequenceMap[nameA] !== undefined) rawOrderA = rawCloudSequenceMap[nameA];
-                if (rawCloudSequenceMap[nameB] !== undefined) rawOrderB = rawCloudSequenceMap[nameB];
+                // Hardcoded fallback checks ensure missing keys map cleanly instead of breaking loops
+                let rawOrderA = sortMap[nameA] !== undefined ? sortMap[nameA] : 9999;
+                let rawOrderB = sortMap[nameB] !== undefined ? sortMap[nameB] : 9999;
                 
                 let orderA = (rawOrderA === "" || rawOrderA === null || isNaN(parseFloat(rawOrderA))) ? 9999 : parseFloat(rawOrderA);
                 let orderB = (rawOrderB === "" || rawOrderB === null || isNaN(parseFloat(rawOrderB))) ? 9999 : parseFloat(rawOrderB);
@@ -598,6 +609,7 @@
     }
 
     function processDashboardViewUpdate(statusMap, isLiveCloudData, metaString) {
+        if (!statusMap) return;
         let prefixText = isLiveCloudData ? "Last Logged: " : "Viewing Past Report: ";
         document.getElementById('latestLogMeta').innerText = `${prefixText}${metaString}`;
         
@@ -619,6 +631,7 @@
     }
 
     function renderDashboardLights(schema, statusRecords) {
+        if (!schema || !statusRecords) return;
         const dashboard = document.getElementById('fullWidthStatusDashboard');
         dashboard.innerHTML = '';
         for (let secId in limitsSchema) {
