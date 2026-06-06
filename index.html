@@ -45,11 +45,9 @@
             transition: all 0.2s ease-in-out;
         }
 
-        /* 💻 FULL-WIDTH RESPONSIVE MODAL CONTAINER SIZING RULES */
         .full-screen-fluid-dialog { max-width: 96% !important; margin: 2% auto !important; }
         .fluid-canvas-viewport { position: relative; height: 50vh !important; width: 100% !important; }
 
-        /* 📱 HIGH-VISIBILITY SCALING RULES FOR MOBILE TABLETS/IPADS */
         @media (max-width: 1024px) {
             .section-block h5 { font-size: 1.45rem !important; margin-bottom: 1rem !important; }
             .alert-item-container label { font-size: 14px !important; font-weight: 700 !important; color: #111111 !important; }
@@ -67,7 +65,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.3.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.4.0 Build</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -130,9 +128,7 @@
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
                     <h4 class="text-secondary mb-0">📝 Digital Floor Log Sheet</h4>
                     <div class="d-flex gap-2">
-                        <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-3 shadow-sm">🟢 Start Route</button>
-                        <button type="button" id="manualSaveBtn" style="display:none;" onclick="executeManualOperatorSave()" class="btn btn-primary fw-bold px-3 shadow-sm">💾 Save Progress</button>
-                        <button type="button" id="manualRecallBtn" style="display:none;" onclick="executeManualOperatorRecall()" class="btn btn-warning fw-bold px-3 shadow-sm text-dark">📂 Recall Draft</button>
+                        <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-4 shadow-sm">🟢 Start New Inspection Route</button>
                     </div>
                 </div>
                 
@@ -234,7 +230,7 @@
                 if (code === 0) clientObservedCond = "Clear Sky";
                 else if (code <= 3) clientObservedCond = "Partly Cloudy";
                 else if (code <= 65) clientObservedCond = "Rain Showers";
-                else clientObservedCond = "Overcast";
+                else clientOuterCond = "Overcast";
                 
                 if (currentViewerIndex === -1) {
                     const weatherViewNode = document.getElementById('dashboardWeatherView');
@@ -317,6 +313,7 @@
         }
     }
 
+    // 🎯 REWRITING THE FILE snapshot block with each keystroke entry
     function saveDraftProgressData() {
         if (!isInspectionActive) return;
         let draft = {
@@ -330,58 +327,14 @@
             draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
+        localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); // Anchor active route tag
     }
 
-    function executeManualOperatorSave() {
-        if (!isInspectionActive) return;
+    function loadSavedDraftProgressData() {
+        let rawDraft = localStorage.getItem('five_star_active_draft_session');
+        if (!rawDraft) return;
+        let draft = JSON.parse(rawDraft);
         
-        let hardStringPayload = {
-            initials: document.getElementById('initials').value,
-            shift: document.getElementById('shift').value,
-            freehandNotes: document.getElementById('freehandNotes').value,
-            temperatures: {},
-            checkboxes: runtimeCheckboxStateMemory,
-            saved_at_timestamp: new Date().toLocaleTimeString()
-        };
-        
-        document.querySelectorAll('input[data-sec]').forEach(input => {
-            if (input.value.trim() !== "") { hardStringPayload.temperatures[input.getAttribute('data-name')] = input.value; }
-        });
-
-        localStorage.setItem('five_star_permanent_operator_checkpoint', JSON.stringify(hardStringPayload));
-        localStorage.setItem('five_star_manual_route_running_interlock', 'TRUE'); // Lock interlock down hard
-        
-        const saveBtn = document.getElementById('manualSaveBtn');
-        saveBtn.innerText = "💾 Saved (" + hardStringPayload.saved_at_timestamp + ")";
-        saveBtn.className = "btn btn-success fw-bold px-3 shadow-sm";
-        
-        document.getElementById('manualRecallBtn').style.display = "inline-block";
-        setTimeout(() => {
-            saveBtn.innerText = "💾 Save Progress";
-            saveBtn.className = "btn btn-primary fw-bold px-3 shadow-sm";
-        }, 2500);
-    }
-
-    function executeManualOperatorRecall() {
-        let rawSnapshot = localStorage.getItem('five_star_permanent_operator_checkpoint');
-        if (!rawSnapshot) { alert("📂 No manual checkpoint discovered on this iPad."); return; }
-        
-        let draft = JSON.parse(rawSnapshot);
-        isInspectionActive = true;
-        localStorage.setItem('five_star_manual_route_running_interlock', 'TRUE'); 
-        clearInterval(backgroundRefreshPollerId);
-        
-        let offlineSchemaRaw = localStorage.getItem('five_star_structural_schema_backup');
-        if (offlineSchemaRaw) {
-            activeStructuralMap = JSON.parse(offlineSchemaRaw);
-            renderDynamicFormElements(activeStructuralMap);
-        }
-
-        document.getElementById('masterForm').classList.remove('form-locked-state');
-        document.getElementById('kioskSessionBtn').innerText = "🛑 Cancel & Reset Route";
-        document.getElementById('kioskSessionBtn').className = "btn btn-danger fw-bold px-3 shadow-sm";
-        document.getElementById('manualSaveBtn').style.display = "inline-block";
-
         document.getElementById('initials').value = draft.initials || "";
         document.getElementById('shift').value = draft.shift || "";
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
@@ -394,35 +347,6 @@
                 evaluateFieldStyle(input, input.getAttribute('data-sec'));
             }
         });
-
-        alert("📂 Progress snapshot recovered successfully! Last saved at: " + (draft.saved_at_timestamp || "Unknown"));
-    }
-
-    function loadSavedDraftProgressData() {
-        let rawDraft = localStorage.getItem('five_star_active_draft_session');
-        if (!rawDraft) return;
-        let draft = JSON.parse(rawDraft);
-        isInspectionActive = true;
-        clearInterval(backgroundRefreshPollerId);
-        
-        document.getElementById('initials').value = draft.initials || "";
-        document.getElementById('shift').value = draft.shift || "";
-        document.getElementById('freehandNotes').value = draft.freehandNotes || "";
-        runtimeCheckboxStateMemory = draft.checkboxes || {};
-        
-        document.querySelectorAll('input[data-sec]').forEach(input => {
-            let name = input.getAttribute('data-name');
-            if (draft.temperatures[name] !== undefined) {
-                input.value = draft.temperatures[name];
-                evaluateFieldStyle(input, input.getAttribute('data-sec'));
-            }
-        });
-        
-        document.getElementById('masterForm').classList.remove('form-locked-state');
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        sessionBtn.innerText = "🛑 Cancel & Reset Route";
-        sessionBtn.className = "btn btn-danger fw-bold px-3 shadow-sm";
-        document.getElementById('manualSaveBtn').style.display = "inline-block";
     }
 
     function toggleKioskFormInterlock() {
@@ -431,7 +355,7 @@
         
         if (!isInspectionActive) {
             isInspectionActive = true;
-            localStorage.setItem('five_star_manual_route_running_interlock', 'TRUE'); 
+            localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); 
             clearInterval(backgroundRefreshPollerId); 
             runtimeCheckboxStateMemory = {};
             
@@ -442,7 +366,7 @@
             .then(res => res.json())
             .then(res => {
                 if (res.status === "success") {
-                    activeStructuralMap = res.structural_schema;
+                    activeStructuralMap = res.status === "success" ? res.structural_schema : {};
                     localStorage.setItem('five_star_structural_schema_backup', JSON.stringify(res.structural_schema));
                     
                     if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
@@ -457,8 +381,7 @@
                     
                     targetForm.classList.remove('form-locked-state');
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
-                    sessionBtn.className = "btn btn-danger fw-bold px-3 shadow-sm";
-                    document.getElementById('manualSaveBtn').style.display = "inline-block";
+                    sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
                     saveDraftProgressData(); 
                     
                     setTimeout(focusInitialWalkwayElement, 500);
@@ -467,7 +390,7 @@
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
                 localStorage.removeItem('five_star_active_draft_session'); 
-                localStorage.removeItem('five_star_manual_route_running_interlock');
+                localStorage.removeItem('five_star_operator_route_running_flag');
                 forceSessionShutdownReset();
             }
         }
@@ -475,16 +398,15 @@
 
     function forceSessionShutdownReset() {
         isInspectionActive = false;
-        localStorage.removeItem('five_star_manual_route_running_interlock');
+        localStorage.removeItem('five_star_operator_route_running_flag');
         runtimeCheckboxStateMemory = {};
         localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         
         const sessionBtn = document.getElementById('kioskSessionBtn');
-        sessionBtn.innerText = "🟢 Start Route";
-        sessionBtn.className = "btn btn-success fw-bold px-3 shadow-sm";
-        document.getElementById('manualSaveBtn').style.display = "none";
+        sessionBtn.innerText = "🟢 Start New Inspection Route";
+        sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
         
         lockSubmissionOnChanges();
         pullSystemStructure();
@@ -497,7 +419,7 @@
         clearInterval(backgroundRefreshPollerId);
         
         backgroundRefreshPollerId = setInterval(() => {
-            if (localStorage.getItem('five_star_manual_route_running_interlock') === 'TRUE') return;
+            if (localStorage.getItem('five_star_operator_route_running_flag') === 'TRUE') return;
 
             const rightNow = Date.now();
             const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
@@ -513,58 +435,53 @@
 
     /*
        ========================================================================
-       🛡️ REINFORCED FAIL-SAFE ROUTING ENGINE (OFFLINE REAL-TIME PROFILE)
+       🛡️ THE REPAIR HANDSHAKE: Offline structure builds instantly on reload
        ========================================================================
     */
     function pullSystemStructure() {
-        // Force evaluation check for persistent operator dashboard parameters immediately on wake
-        if (localStorage.getItem('five_star_permanent_operator_checkpoint')) {
-            document.getElementById('manualRecallBtn').style.display = "inline-block";
-        }
-
-        let isRouteOpenOnHardware = localStorage.getItem('five_star_manual_route_running_interlock') === 'TRUE';
+        let isRouteOpenOnHardware = localStorage.getItem('five_star_operator_route_running_flag') === 'TRUE';
         let offlineSchemaRaw = localStorage.getItem('five_star_structural_schema_backup');
         let offlineOrdersRaw = localStorage.getItem('five_star_hardware_order_backup');
-        let offlineHistoryRaw = localStorage.getItem('five_star_historical_ledger_backup');
-        let offlineStatusRaw = localStorage.getItem('five_star_current_status_backup');
-        let offlineMetaRaw = localStorage.getItem('five_star_meta_log_backup') || "Local Profile Active";
 
-        // Pre-parse hardware drive parameters locally on wake. Guarantees chart and widget stability!
-        if (offlineSchemaRaw) {
+        // 🛑 STEP 1: If mid-inspection, build form fields instantly from local storage memory baseline
+        if (isRouteOpenOnHardware && offlineSchemaRaw) {
+            isInspectionActive = true;
             activeStructuralMap = JSON.parse(offlineSchemaRaw);
             rawCloudSequenceMap = offlineOrdersRaw ? JSON.parse(offlineOrdersRaw) : {};
-            if (offlineHistoryRaw) localCacheHistory = JSON.parse(offlineHistoryRaw);
-            if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
             
-            if (isRouteOpenOnHardware) {
-                isInspectionActive = true;
-                renderDynamicFormElements(activeStructuralMap);
+            // Rebuild grid architecture locally before hitting network pipelines
+            renderDynamicFormElements(activeStructuralMap, function() {
                 loadSavedDraftProgressData();
-            } else {
-                if (!isInspectionActive) { renderDynamicFormElements(activeStructuralMap); }
-            }
-            if (currentViewerIndex === -1) processDashboardViewUpdate(activeDashboardMemoryCache, false, offlineMetaRaw);
+                const targetForm = document.getElementById('masterForm');
+                const sessionBtn = document.getElementById('kioskSessionBtn');
+                if (targetForm) targetForm.classList.remove('form-locked-state');
+                if (sessionBtn) {
+                    sessionBtn.innerText = "🛑 Cancel & Reset Route";
+                    sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+                }
+            });
+        } else if (offlineSchemaRaw) {
+            activeStructuralMap = JSON.parse(offlineSchemaRaw);
+            rawCloudSequenceMap = offlineOrdersRaw ? JSON.parse(offlineOrdersRaw) : {};
+            if (!isInspectionActive) { renderDynamicFormElements(activeStructuralMap); }
         }
 
+        // STEP 2: Network fetch execution profiles metrics charts without resetting open fields
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 localStorage.setItem('five_star_structural_schema_backup', JSON.stringify(res.structural_schema));
-                localStorage.setItem('five_star_historical_ledger_backup', JSON.stringify(res.historical_ledger_packages || []));
-                localStorage.setItem('five_star_current_status_backup', JSON.stringify(res.current_status || {}));
-                localStorage.setItem('five_star_meta_log_backup', res.meta_last_log || "");
-                
-                activeStructuralMap = res.structural_schema;
-                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
                 if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                 else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                 localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                 
-                // 🛑 LOCKOUT BARRIER: Blocks server traffic loops from resetting form DOM configurations
+                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                if (res.current_status) activeDashboardMemoryCache = res.current_status;
+                
+                // Hard-lock barrier: Server responses are completely blocked from erasing input cells mid-route!
                 if (!isInspectionActive && !isRouteOpenOnHardware) { 
                     renderDynamicFormElements(res.structural_schema); 
                 }
@@ -572,11 +489,11 @@
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
         }).catch(err => {
-            console.log("Wi-Fi network connection down. Operating securely from flash drive backup memory mirrors.");
+            console.log("Operating locally via device flash profile layers.");
         });
     }
 
-    function renderDynamicFormElements(schema) {
+    function renderDynamicFormElements(schema, layoutCompletionCallback) {
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
         
@@ -604,6 +521,11 @@
         }
 
         rebuildDynamicCloudSequenceArray();
+
+        // Execution fence checks painted state context prior to firing input population loops
+        if (typeof layoutCompletionCallback === "function") {
+            layoutCompletionCallback();
+        }
     }
 
     function rebuildDynamicCloudSequenceArray() {
@@ -813,15 +735,81 @@
         modalInstance.show();
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
-        updateLiveClockAndWeather();
-        setInterval(updateLiveClockAndWeather, 60000);
+    function transmitLogsToCloud() {
+        saveActiveCheckboxesToMemory();
+        const submitBtn = document.getElementById('finalSubmitBtn');
+        submitBtn.disabled = true; 
+        submitBtn.innerText = "⏳ Synchronizing Log Stream...";
+        
+        let package = [];
+        let sharedNotes = document.getElementById('freehandNotes').value.trim() || "None Logged";
+        
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            package.push({
+                cooler_name: input.getAttribute('data-name'),
+                temperature: parseFloat(input.value),
+                action_taken: "Logged Status Passed"
+            });
+        });
+
+        fetch(cloudSpreadsheetURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+                routing_action: "SUBMIT_DATA_STREAM",
+                time: new Date().toLocaleString(),
+                user: document.getElementById('initials').value.toUpperCase(),
+                shift: document.getElementById('shift').value,
+                inspector_notes: sharedNotes, 
+                records_package: package
+            })
+        }).then(() => {
+            alert("🚀 Log secure-synced to spreadsheet records!");
+            localStorage.removeItem('five_star_active_draft_session');
+            localStorage.removeItem('five_star_operator_route_running_flag');
+            forceSessionShutdownReset(); 
+        }).catch(err => {
+            alert("⚠️ Connection Timeout.");
+            submitBtn.disabled = false;
+            submitBtn.innerText = "🔒 Complete Log & Submit to Sheet";
+        });
+    }
+
+    function modifyAssetRegistry(routingActionName) {
+        let section = document.getElementById('mgmtSection').value;
+        let coolerName = document.getElementById('mgmtCoolerName').value.trim();
+        let orderRank = document.getElementById('mgmtPlacementOrder').value.trim();
+        let code = document.getElementById('mgmtAuthCode').value.trim();
+        if (!coolerName || !code) { alert("⚠️ Asset name and authorization PIN are strictly required."); return; }
+        if (!confirm(`Commit configuration changes to the store layout?`)) return;
+
+        fetch(cloudSpreadsheetURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+                routing_action: routingActionName,
+                target_section: section,
+                new_asset_name: coolerName,
+                asset_name: coolerName,
+                target_order: orderRank,
+                auth_code: code
+            })
+        }).then(() => {
+            alert("⚙️ Configuration modified!");
+            document.getElementById('mgmtCoolerName').value = '';
+            document.getElementById('mgmtPlacementOrder').value = '';
+            document.getElementById('mgmtAuthCode').value = '';
+            setTimeout(pullSystemStructure, 1000);
+        });
+    }
+
+    window.onload = function() {
+        absoluteLastSyncTimestampMemory = Date.now();
         pullSystemStructure();
         startAutomaticDashboardPolling(); 
         
         var targetModalNode = document.getElementById('trendChartModal');
         targetModalNode.addEventListener('shown.bs.modal', function () {
-            // Safety Guard: Stop script execution entirely if bounds payload returns uninstantiated
             if (!appleGlobalPendingAsset || !appleGlobalPendingLimits) return;
             
             let labelsTimeline = [];
