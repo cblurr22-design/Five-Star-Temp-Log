@@ -65,7 +65,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.1.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.2.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -171,6 +171,7 @@
     </div>
 </div>
 
+<!-- Modal window with perfectly centered full width configuration -->
 <div class="modal fade" id="trendChartModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered full-screen-fluid-dialog">
         <div class="modal-content shadow-lg">
@@ -235,7 +236,7 @@
                 if (code === 0) clientObservedCond = "Clear Sky";
                 else if (code <= 3) clientObservedCond = "Partly Cloudy";
                 else if (code <= 65) clientObservedCond = "Rain Showers";
-                else clientOuterCond = "Overcast";
+                else clientObservedCond = "Overcast";
                 
                 if (currentViewerIndex === -1) {
                     const weatherViewNode = document.getElementById('dashboardWeatherView');
@@ -245,7 +246,6 @@
                 }
             }
         }).catch(err => {
-            console.log("Weather service unreachable.");
             clientObservedTemp = "72°F";
             clientObservedCond = "Clear Sky";
         });
@@ -347,12 +347,11 @@
         };
         
         document.querySelectorAll('input[data-sec]').forEach(input => {
-            if (input.value.trim() !== "") {
-                hardStringPayload.temperatures[input.getAttribute('data-name')] = input.value;
-            }
+            if (input.value.trim() !== "") { hardStringPayload.temperatures[input.getAttribute('data-name')] = input.value; }
         });
 
         localStorage.setItem('five_star_permanent_operator_checkpoint', JSON.stringify(hardStringPayload));
+        localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); // 🎯 CRITICAL STATE ANCHOR
         
         const saveBtn = document.getElementById('manualSaveBtn');
         saveBtn.innerText = "💾 Saved (" + hardStringPayload.saved_at_timestamp + ")";
@@ -371,6 +370,7 @@
         
         let draft = JSON.parse(rawSnapshot);
         isInspectionActive = true;
+        localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); // Anchor active route tag
         clearInterval(backgroundRefreshPollerId);
         
         let offlineSchemaRaw = localStorage.getItem('five_star_structural_schema_backup');
@@ -421,8 +421,9 @@
         });
         
         document.getElementById('masterForm').classList.remove('form-locked-state');
-        document.getElementById('kioskSessionBtn').innerText = "🛑 Cancel & Reset Route";
-        document.getElementById('kioskSessionBtn').className = "btn btn-danger fw-bold px-3 shadow-sm";
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        sessionBtn.innerText = "🛑 Cancel & Reset Route";
+        sessionBtn.className = "btn btn-danger fw-bold px-3 shadow-sm";
         document.getElementById('manualSaveBtn').style.display = "inline-block";
     }
 
@@ -432,6 +433,7 @@
         
         if (!isInspectionActive) {
             isInspectionActive = true;
+            localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); // Core flag lock down
             clearInterval(backgroundRefreshPollerId); 
             runtimeCheckboxStateMemory = {};
             
@@ -449,6 +451,7 @@
                     else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                     else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                     else rawCloudSequenceMap = {};
+                    localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                     
                     renderDynamicFormElements(res.structural_schema);
                     if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
@@ -466,6 +469,7 @@
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
                 localStorage.removeItem('five_star_active_draft_session'); 
+                localStorage.removeItem('five_star_operator_route_running_flag');
                 forceSessionShutdownReset();
             }
         }
@@ -473,6 +477,7 @@
 
     function forceSessionShutdownReset() {
         isInspectionActive = false;
+        localStorage.removeItem('five_star_operator_route_running_flag');
         runtimeCheckboxStateMemory = {};
         localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
@@ -494,6 +499,9 @@
         clearInterval(backgroundRefreshPollerId);
         
         backgroundRefreshPollerId = setInterval(() => {
+            // Halt network loop query sequences cleanly if an operator route flag is active
+            if (localStorage.getItem('five_star_operator_route_running_flag') === 'TRUE') return;
+
             const rightNow = Date.now();
             const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
             
@@ -506,47 +514,71 @@
         }, 30000); 
     }
 
+    /*
+       ========================================================================
+       🛡️ REINFORCED RECOVERY LOGIC (OFFLINE-FIRST GATEWAYS)
+       ========================================================================
+    */
     function pullSystemStructure() {
-        // 🎯 SHIELD 1: Keep the Recall button visible instantly on wake if a save exists
+        // Evaluate manual save button presence cleanly on absolute script startup
         if (localStorage.getItem('five_star_permanent_operator_checkpoint')) {
             document.getElementById('manualRecallBtn').style.display = "inline-block";
         }
 
+        // Hard recovery check: Did the iPad reload mid-route? Pre-emptively restore layout parameters!
+        let isRouteOpenOnHardware = localStorage.getItem('five_star_operator_route_running_flag') === 'TRUE';
         let offlineSchemaRaw = localStorage.getItem('five_star_structural_schema_backup');
+        let offlineOrdersRaw = localStorage.getItem('five_star_hardware_order_backup');
+        let offlineHistoryRaw = localStorage.getItem('five_star_historical_ledger_backup');
+        let offlineStatusRaw = localStorage.getItem('five_star_current_status_backup');
+        let offlineMetaRaw = localStorage.getItem('five_star_meta_log_backup') || "Cached System View";
+
+        // Read and restore charts dataset from hard flash components natively to solve blanking loops
         if (offlineSchemaRaw) {
             activeStructuralMap = JSON.parse(offlineSchemaRaw);
-            // 🎯 SHIELD 2: Block layout rewrites on wake if the user has unlocked the form
-            if (!isInspectionActive) { renderDynamicFormElements(activeStructuralMap); }
+            rawCloudSequenceMap = offlineOrdersRaw ? JSON.parse(offlineOrdersRaw) : {};
+            if (offlineHistoryRaw) localCacheHistory = JSON.parse(offlineHistoryRaw);
+            if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
+            
+            if (isRouteOpenOnHardware) {
+                isInspectionActive = true;
+                renderDynamicFormElements(activeStructuralMap);
+                loadSavedDraftProgressData();
+            } else {
+                if (!isInspectionActive) { renderDynamicFormElements(activeStructuralMap); }
+            }
+            if (currentViewerIndex === -1) processDashboardViewUpdate(activeDashboardMemoryCache, false, offlineMetaRaw);
         }
 
+        // Network Fetch executes purely to refresh dashboard metrics, but is STRICTLY forbidden from erasing layouts
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
-                activeStructuralMap = res.structural_schema;
+                // Flash core updates down to local storage blocks safely
                 localStorage.setItem('five_star_structural_schema_backup', JSON.stringify(res.structural_schema));
+                localStorage.setItem('five_star_historical_ledger_backup', JSON.stringify(res.historical_ledger_packages || []));
+                localStorage.setItem('five_star_current_status_backup', JSON.stringify(res.current_status || {}));
+                localStorage.setItem('five_star_meta_log_backup', res.meta_last_log || "");
+                
+                activeStructuralMap = res.structural_schema;
+                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
                 if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                 else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
+                localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                 
-                // 🎯 SHIELD 3: Block incoming spreadsheet updates from erasing an open form layout
-                if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
-                
-                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                if (res.current_status) activeDashboardMemoryCache = res.current_status;
-                
-                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
-                    renderDynamicFormElements(res.structural_schema);
-                    loadSavedDraftProgressData();
+                // 🛑 SAFETY GATE: Prevents incoming server loops from executing clean-slates mid walk
+                if (!isInspectionActive && !isRouteOpenOnHardware) { 
+                    renderDynamicFormElements(res.structural_schema); 
                 }
                 
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
         }).catch(err => {
-            if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
-                loadSavedDraftProgressData();
-            }
+            console.log("Network timeout logged. Retaining verified hardware memory cache matrices.");
         });
     }
 
@@ -815,8 +847,8 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
-            // 🎯 Clear manual checkpoint on successful submit
             localStorage.removeItem('five_star_permanent_operator_checkpoint');
+            localStorage.removeItem('five_star_operator_route_running_flag');
             document.getElementById('manualRecallBtn').style.display = "none";
             forceSessionShutdownReset(); 
         }).catch(err => {
