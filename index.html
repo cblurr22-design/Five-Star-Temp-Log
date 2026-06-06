@@ -66,8 +66,8 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Check System <span class="badge bg-success fs-6 align-middle ms-2">v1.3.1</span></h2>
-            <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
+            <h2 class="mb-0">Five Star Refrigeration Check System <span class="badge bg-success fs-6 align-middle ms-2">v1.3.2</span></h2>
+            <small>Dynamic Self-Assembling Interface Layout Module with iPad Draft Lock Protection</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
@@ -186,6 +186,7 @@
 <script>
     const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbwzuacLcc1hszemBVo3S-hWtfP57tSx7ZpKlyWFOBrE8DMjXtiDgdCfLToFFQqqUJyH/exec";
     const draftStorageKey = "five_star_active_draft_session";
+    const activeSessionKey = "five_star_route_active";
 
     const limitsSchema = {
         sec1: { title: "🥛 1. Dairy / Refrigerated", min: 28.5, max: 40 },
@@ -277,58 +278,60 @@
         validateActionsBtn.style.display = "none";
     }
 
+    function hasAnyTemperatureEntry() {
+        return Array.from(document.querySelectorAll('input[data-sec]')).some(input => input.value.trim() !== "");
+    }
+
     function handleShiftSelectionContextChange() {
-        saveDraftProgressData();
+        localStorage.setItem(activeSessionKey, "true");
+        isInspectionActive = true;
+
         const selectedShiftValue = document.getElementById('shift').value;
 
-        document.querySelectorAll('input[data-sec]').forEach(input => {
-            const assetName = input.getAttribute('data-name');
-            const sectionId = input.getAttribute('data-sec');
-            const limits = limitsSchema[sectionId];
+        /*
+            IMPORTANT FIX:
+            Changing the shift no longer clears entered temperatures.
 
-            if (selectedShiftValue === "Recheck") {
+            Previous behavior:
+            - Any non-Recheck shift erased every temperature field.
+            - Recheck could also overwrite fields.
+
+            New behavior:
+            - Shift selection saves only the shift.
+            - Existing temperature entries are preserved.
+            - Recheck only fills EMPTY fields with prior GREEN readings.
+        */
+
+        if (selectedShiftValue === "Recheck") {
+            document.querySelectorAll('input[data-sec]').forEach(input => {
+                if (input.value.trim() !== "") return;
+
+                const assetName = input.getAttribute('data-name');
+                const sectionId = input.getAttribute('data-sec');
+                const limits = limitsSchema[sectionId];
                 const cachedData = activeDashboardMemoryCache[assetName];
 
                 if (cachedData && cachedData.temp !== "N/A" && cachedData.temp !== "") {
                     const priorTemperatureValue = parseFloat(cachedData.temp);
+
                     if (!isNaN(priorTemperatureValue)) {
                         const priorStatusClass = determineStatusClass(priorTemperatureValue, limits);
 
                         if (priorStatusClass === "status-green") {
                             input.value = priorTemperatureValue;
-                        } else {
-                            input.value = "";
+                            evaluateFieldStyle(input, sectionId);
                         }
-
-                        evaluateFieldStyle(input, sectionId);
                     }
-                } else {
-                    input.value = "";
-                    evaluateFieldStyle(input, sectionId);
                 }
-            } else {
-                input.value = "";
-                evaluateFieldStyle(input, sectionId);
-            }
-        });
+            });
+        }
 
         saveDraftProgressData();
-
-        if (selectedShiftValue === "Recheck") {
-            setTimeout(() => {
-                for (let i = 0; i < calculatedSequenceArray.length; i++) {
-                    if (calculatedSequenceArray[i].value === "") {
-                        calculatedSequenceArray[i].focus();
-                        calculatedSequenceArray[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        break;
-                    }
-                }
-            }, 300);
-        }
+        lockSubmissionOnChanges();
     }
 
     function saveDraftProgressData() {
-        if (!isInspectionActive) return;
+        if (!isInspectionActive && localStorage.getItem(activeSessionKey) !== "true") return;
 
         const initialsNode = document.getElementById('initials');
         const shiftNode = document.getElementById('shift');
@@ -350,6 +353,7 @@
         });
 
         localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+        localStorage.setItem(activeSessionKey, "true");
     }
 
     function loadSavedDraftProgressData() {
@@ -366,6 +370,7 @@
         }
 
         isInspectionActive = true;
+        localStorage.setItem(activeSessionKey, "true");
         clearInterval(backgroundRefreshPollerId);
 
         document.getElementById('initials').value = draft.initials || "";
@@ -388,12 +393,34 @@
         sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
     }
 
+    function forceReadyEntryStateUntilSubmit() {
+        if (localStorage.getItem(activeSessionKey) === "true") {
+            isInspectionActive = true;
+
+            const form = document.getElementById('masterForm');
+            const sessionBtn = document.getElementById('kioskSessionBtn');
+
+            if (form) form.classList.remove('form-locked-state');
+
+            if (sessionBtn) {
+                sessionBtn.innerText = "🛑 Cancel & Reset Route";
+                sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+            }
+        }
+    }
+
+    function clearSavedRouteSession() {
+        localStorage.removeItem(draftStorageKey);
+        localStorage.removeItem(activeSessionKey);
+    }
+
     function toggleKioskFormInterlock() {
         const targetForm = document.getElementById('masterForm');
         const sessionBtn = document.getElementById('kioskSessionBtn');
 
         if (!isInspectionActive) {
             isInspectionActive = true;
+            localStorage.setItem(activeSessionKey, "true");
             clearInterval(backgroundRefreshPollerId);
             runtimeCheckboxStateMemory = {};
 
@@ -427,7 +454,7 @@
                 });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                localStorage.removeItem(draftStorageKey);
+                clearSavedRouteSession();
                 forceSessionShutdownReset();
             }
         }
@@ -436,7 +463,7 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
-        localStorage.removeItem(draftStorageKey);
+        clearSavedRouteSession();
 
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
@@ -481,16 +508,21 @@
                     else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                     else rawCloudSequenceMap = {};
 
-                    if (!isInspectionActive) {
+                    if (!isInspectionActive || localStorage.getItem(activeSessionKey) === "true") {
                         renderDynamicFormElements(res.structural_schema);
                     }
 
                     if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                     if (res.current_status) activeDashboardMemoryCache = res.current_status;
 
-                    if (localStorage.getItem(draftStorageKey) && !isInspectionActive) {
-                        renderDynamicFormElements(res.structural_schema);
-                        loadSavedDraftProgressData();
+                    if (localStorage.getItem(activeSessionKey) === "true") {
+                        forceReadyEntryStateUntilSubmit();
+
+                        if (localStorage.getItem(draftStorageKey)) {
+                            loadSavedDraftProgressData();
+                        } else {
+                            saveDraftProgressData();
+                        }
                     }
 
                     if (currentViewerIndex === -1) {
@@ -800,6 +832,7 @@
         })
         .then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
+            clearSavedRouteSession();
             forceSessionShutdownReset();
         })
         .catch(() => {
@@ -858,12 +891,17 @@
         window.addEventListener("beforeunload", function() {
             saveDraftProgressData();
         });
+
+        window.addEventListener("blur", function() {
+            saveDraftProgressData();
+        });
     }
 
     window.onload = function() {
         absoluteLastSyncTimestampMemory = Date.now();
 
         attachIPadDraftProtectionHandlers();
+        forceReadyEntryStateUntilSubmit();
 
         updateLiveClockAndWeather();
         setInterval(updateLiveClockAndWeather, 60000);
@@ -992,4 +1030,3 @@
 </body>
 </html>
 ```
-
