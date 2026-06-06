@@ -65,12 +65,13 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.1.1</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.2.0 (Lock Restructured)</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
+    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -91,6 +92,7 @@
         <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard lights parameters.</div>
     </div>
 
+    <!-- Manager Asset Console -->
     <div class="card p-3 mb-4 bg-light border-warning">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="text-dark fw-bold mb-0">⚙️ Manager Asset Governance Console</h5>
@@ -125,6 +127,7 @@
         </div>
     </div>
 
+    <!-- Digital Input Worksheet Panel Area -->
     <div class="row">
         <div class="col-12 col-lg-7">
             <div class="card p-4 shadow-sm border-primary" style="border-width: 2px;">
@@ -185,7 +188,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // 🚨 FIXED GLOBAL DEPLOYMENT LINK CONFIGURATION TARGET
     const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbwzuacLcc1hszemBVo3S-hWtfP57tSx7ZpKlyWFOBrE8DMjXtiDgdCfLToFFQqqUJyH/exec";
 
     const limitsSchema = {
@@ -316,8 +318,17 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
+    /*
+       ========================================================================
+       🛡️ REINFORCED INTERLOCK STATE RESTORATION ENGINE (ANTI-RESET TRUE FIXED)
+       ========================================================================
+    */
     function forceVisualUnlockingSequence() {
         isInspectionActive = true;
+        
+        // 🎯 Master State Flag protection set to TRUE right inside hardware drive partitions
+        localStorage.setItem('five_star_kiosk_layout_interlock_active', 'TRUE');
+        
         const masterFormNode = document.getElementById('masterForm');
         if (masterFormNode) masterFormNode.classList.remove('form-locked-state');
         
@@ -330,10 +341,12 @@
 
     function loadSavedDraftProgressData() {
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
+        
+        // Force state parameter unlocking first to prevent view collapse
+        forceVisualUnlockingSequence();
+        
         if (!rawDraft) return;
         let draft = JSON.parse(rawDraft);
-        
-        forceVisualUnlockingSequence();
         
         document.getElementById('initials').value = draft.initials || "";
         document.getElementById('shift').value = draft.shift || "";
@@ -364,9 +377,9 @@
                 if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
                 
                 renderDynamicFormElements(activeStructuralMap);
-                targetForm.classList.remove('form-locked-state');
-                sessionBtn.innerText = "🛑 Cancel & Reset Route";
-                sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+                
+                // Fire layout configuration parameters lock
+                forceVisualUnlockingSequence();
                 saveDraftProgressData();
                 setTimeout(focusInitialWalkwayElement, 500);
             } else {
@@ -375,7 +388,9 @@
             }
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
+                // Wipe visual flag parameters explicitly inside cancellation loops
                 localStorage.removeItem('five_star_active_draft_session'); 
+                localStorage.removeItem('five_star_kiosk_layout_interlock_active');
                 forceSessionShutdownReset();
             }
         }
@@ -384,6 +399,7 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
+        localStorage.removeItem('five_star_kiosk_layout_interlock_active');
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         document.getElementById('dynamicWizardContainer').innerHTML = '';
@@ -464,6 +480,9 @@
         let offlineStatusRaw = localStorage.getItem('five_star_status_cache');
         let offlineMetaRaw = localStorage.getItem('five_star_meta_log') || "Cached Local Mirror";
         let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
+        
+        // 🚨 OVERRIDE SWITCH CHECK: Read layout flag parameters immediately before looking at text content strings
+        let isInterlockActiveInMemory = localStorage.getItem('five_star_kiosk_layout_interlock_active') === 'TRUE';
 
         if (offlineSchemaRaw) {
             activeStructuralMap = JSON.parse(offlineSchemaRaw);
@@ -473,7 +492,8 @@
 
             renderDynamicFormElements(activeStructuralMap);
 
-            if (localStorage.getItem('five_star_active_draft_session')) {
+            if (isInterlockActiveInMemory) {
+                // If a route was explicitly opened prior to lock screen, bypass start view entirely
                 loadSavedDraftProgressData();
             } else {
                 if (!isInspectionActive) {
@@ -552,7 +572,6 @@
         evaluateFieldStyle(e.target, e.target.getAttribute('data-sec'));
     }
 
-    // Explicitly focus initial equipment node on checklist initialization sequence paths
     function focusInitialWalkwayElement() {
         if (calculatedSequenceArray.length > 0) {
             calculatedSequenceArray[0].focus();
@@ -990,6 +1009,7 @@
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
             localStorage.removeItem('five_star_active_draft_session'); 
+            localStorage.removeItem('five_star_kiosk_layout_interlock_active');
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
