@@ -45,7 +45,6 @@
             transition: all 0.2s ease-in-out;
         }
 
-        /* 📱 HIGH-VISIBILITY SCALING RULES FOR MOBILE TABLETS/IPADS */
         @media (max-width: 1024px) {
             .section-block h5 { font-size: 1.45rem !important; margin-bottom: 1rem !important; }
             .alert-item-container label { font-size: 14px !important; font-weight: 700 !important; color: #111111 !important; }
@@ -63,7 +62,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.2.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.5.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -236,7 +235,6 @@
                 }
             }
         }).catch(err => {
-            console.log("Weather service unreachable. Rolling over to safe local fallbacks.");
             clientObservedTemp = "72°F";
             clientObservedCond = "Clear Sky";
         });
@@ -267,11 +265,6 @@
         document.getElementById('validateActionsBtn').style.display = "none";
     }
 
-    /*
-       ========================================================================
-       🎯 FIXED INTERPOLATION GATES: Never erases current cells on late choice
-       ========================================================================
-    */
     function handleShiftSelectionContextChange() {
         saveDraftProgressData();
         const selectedShiftValue = document.getElementById('shift').value;
@@ -290,7 +283,6 @@
                         const priorStatusClass = determineStatusClass(priorTemperatureValue, limits);
                         
                         if (priorStatusClass === "status-green") {
-                            // Only auto-fill if the input box is currently completely empty
                             if (input.value.trim() === "") {
                                 input.value = priorTemperatureValue;
                                 evaluateFieldStyle(input, sectionId);
@@ -317,7 +309,10 @@
     }
 
     function saveDraftProgressData() {
-        if (!isInspectionActive) return;
+        // 🎯 SAVE TARGET SHIELD: Explicitly checks hard storage driving parameters
+        let isRouteOpenOnHardware = localStorage.getItem('five_star_route_running') === 'TRUE';
+        if (!isInspectionActive && !isRouteOpenOnHardware) return;
+
         let draft = {
             initials: document.getElementById('initials').value,
             shift: document.getElementById('shift').value,
@@ -335,7 +330,9 @@
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
         if (!rawDraft) return;
         let draft = JSON.parse(rawDraft);
+        
         isInspectionActive = true;
+        localStorage.setItem('five_star_route_running', 'TRUE'); // Lock flag down
         clearInterval(backgroundRefreshPollerId);
         
         document.getElementById('initials').value = draft.initials || "";
@@ -363,6 +360,7 @@
         
         if (!isInspectionActive) {
             isInspectionActive = true;
+            localStorage.setItem('five_star_route_running', 'TRUE'); // 🎯 BIND LOCK ON ACTIVE CLICK
             clearInterval(backgroundRefreshPollerId); 
             runtimeCheckboxStateMemory = {};
             
@@ -373,12 +371,15 @@
             .then(res => res.json())
             .then(res => {
                 if (res.status === "success") {
+                    // Write backup structure parameters safely to storage partitions
+                    localStorage.setItem('five_star_cached_schema', JSON.stringify(res.structural_schema));
                     activeStructuralMap = res.structural_schema;
                     
                     if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                     else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                     else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                     else rawCloudSequenceMap = {};
+                    localStorage.setItem('five_star_cached_orders', JSON.stringify(rawCloudSequenceMap));
                     
                     renderDynamicFormElements(res.structural_schema);
                     if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
@@ -395,6 +396,7 @@
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
                 localStorage.removeItem('five_star_active_draft_session'); 
+                localStorage.removeItem('five_star_route_running'); // Wipe lockout parameters completely
                 forceSessionShutdownReset();
             }
         }
@@ -402,6 +404,7 @@
 
     function forceSessionShutdownReset() {
         isInspectionActive = false;
+        localStorage.removeItem('five_star_route_running');
         runtimeCheckboxStateMemory = {};
         localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
@@ -422,12 +425,14 @@
         clearInterval(backgroundRefreshPollerId);
         
         backgroundRefreshPollerId = setInterval(() => {
+            // 🛑 CRITICAL INTERCEPT RULE: Completely halts background timers if a route is active
+            if (localStorage.getItem('five_star_route_running') === 'TRUE') return; 
+
             const rightNow = Date.now();
             const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
             
             if (!isInspectionActive && currentViewerIndex === -1) {
                 if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
-                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
                     absoluteLastSyncTimestampMemory = rightNow;
                     pullSystemStructure(); 
                 }
@@ -437,21 +442,38 @@
 
     /*
        ========================================================================
-       🛡️ SAFE WAKE SHIELD: Prioritizes cached layouts over dynamic internet fetches
+       🛡️ THE TOTAL LOCKOUT ENGINE (WAKE-PROOF RECOVERY)
        ========================================================================
     */
     function pullSystemStructure() {
-        // Pre-Intercept: If an unsubmitted active route draft exists in device memory on page awake
-        if (localStorage.getItem('five_star_active_draft_session')) {
-            isInspectionActive = true; // Block incoming rendering rewrites instantly
+        // 🎯 THE HARDWARE ANCHOR SWITCH
+        // Check the hard storage drive the absolute millisecond the tablet screen wakes up
+        let isRouteOpenOnHardware = localStorage.getItem('five_star_route_running') === 'TRUE';
+        
+        if (isRouteOpenOnHardware) {
+            isInspectionActive = true; // Lock out variable toggles
+            
+            // Read stored configuration schema mirrors offline to bypass Wi-Fi delays entirely
+            let backupSchemaRaw = localStorage.getItem('five_star_cached_schema');
+            let backupOrdersRaw = localStorage.getItem('five_star_cached_orders');
+            
+            if (backupSchemaRaw) {
+                activeStructuralMap = JSON.parse(backupSchemaRaw);
+                rawCloudSequenceMap = backupOrdersRaw ? JSON.parse(backupOrdersRaw) : {};
+                
+                // Mount layout, lock fields, and fill text data instantly without hitting the internet
+                renderDynamicFormElements(activeStructuralMap);
+                loadSavedDraftProgressData();
+                return; // 🛑 INTERCEPT: Completely exits and refuses to call Google Sheets mid-walk!
+            }
         }
 
+        // Standard network boot loop triggers ONLY if a walk is not active
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 activeStructuralMap = res.structural_schema;
-                
                 if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                 else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
@@ -459,12 +481,6 @@
                 if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
-                
-                if (localStorage.getItem('five_star_active_draft_session')) {
-                    // Force field assembly, inject data cells, and drop home screen interlock button blocks
-                    renderDynamicFormElements(res.structural_schema);
-                    loadSavedDraftProgressData();
-                }
                 
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
@@ -979,6 +995,9 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
+            
+            // Wipe hardware lockout tags explicitly only upon flawless transmission completion
+            localStorage.removeItem('five_star_route_running');
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
