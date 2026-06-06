@@ -63,7 +63,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.1.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.2.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -267,6 +267,11 @@
         document.getElementById('validateActionsBtn').style.display = "none";
     }
 
+    /*
+       ========================================================================
+       🎯 FIXED INTERPOLATION GATES: Never erases current cells on late choice
+       ========================================================================
+    */
     function handleShiftSelectionContextChange() {
         saveDraftProgressData();
         const selectedShiftValue = document.getElementById('shift').value;
@@ -285,20 +290,14 @@
                         const priorStatusClass = determineStatusClass(priorTemperatureValue, limits);
                         
                         if (priorStatusClass === "status-green") {
-                            input.value = priorTemperatureValue;
-                            evaluateFieldStyle(input, sectionId);
-                        } else {
-                            input.value = "";
-                            evaluateFieldStyle(input, sectionId);
+                            // Only auto-fill if the input box is currently completely empty
+                            if (input.value.trim() === "") {
+                                input.value = priorTemperatureValue;
+                                evaluateFieldStyle(input, sectionId);
+                            }
                         }
                     }
-                } else {
-                    input.value = "";
-                    evaluateFieldStyle(input, sectionId);
                 }
-            } else {
-                input.value = "";
-                evaluateFieldStyle(input, sectionId);
             }
         });
         
@@ -436,7 +435,17 @@
         }, 30000); 
     }
 
+    /*
+       ========================================================================
+       🛡️ SAFE WAKE SHIELD: Prioritizes cached layouts over dynamic internet fetches
+       ========================================================================
+    */
     function pullSystemStructure() {
+        // Pre-Intercept: If an unsubmitted active route draft exists in device memory on page awake
+        if (localStorage.getItem('five_star_active_draft_session')) {
+            isInspectionActive = true; // Block incoming rendering rewrites instantly
+        }
+
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
@@ -451,7 +460,8 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
+                if (localStorage.getItem('five_star_active_draft_session')) {
+                    // Force field assembly, inject data cells, and drop home screen interlock button blocks
                     renderDynamicFormElements(res.structural_schema);
                     loadSavedDraftProgressData();
                 }
@@ -729,7 +739,6 @@
                 }
             }
             
-            // 🎯 FIXED TRACKING SCALE GATE: Cap points at a maximum history length of 50 logs
             if (labelsTimeline.length > 50) {
                 labelsTimeline = labelsTimeline.slice(-50);
                 dataPointsPlot = dataPointsPlot.slice(-50);
@@ -934,6 +943,7 @@
         
         document.querySelectorAll('input[data-sec]').forEach(input => {
             let assetName = input.getAttribute('data-name');
+            let sectionId = input.getAttribute('data-sec');
             let matchedAction = "None Required";
             
             if (runtimeCheckboxStateMemory[assetName]) {
@@ -947,7 +957,7 @@
             }
             
             package.push({
-                department: limitsSchema[input.getAttribute('data-sec')].title,
+                department: limitsSchema[sectionId].title,
                 cooler_name: assetName,
                 temperature: parseFloat(input.value),
                 action_taken: matchedAction
