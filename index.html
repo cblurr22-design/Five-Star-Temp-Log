@@ -269,7 +269,7 @@
 
     /*
        ========================================================================
-       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM Core (FIXED NON-DESTRUCTIVE)
+       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM
        ========================================================================
     */
     function handleShiftSelectionContextChange() {
@@ -291,13 +291,12 @@
                         
                         if (priorStatusClass === "status-green") {
                             input.value = priorTemperatureValue;
+                            input.setAttribute('data-autofilled-recheck', 'true');
                             evaluateFieldStyle(input, sectionId);
                         } else {
-                            // Clear out only previously failed assets so they can be re-logged
-                            if (input.value === priorTemperatureValue.toString() || input.value === "") {
-                                input.value = "";
-                                evaluateFieldStyle(input, sectionId);
-                            }
+                            input.value = "";
+                            input.removeAttribute('data-autofilled-recheck');
+                            evaluateFieldStyle(input, sectionId);
                         }
                     }
                 } else {
@@ -305,8 +304,8 @@
                     evaluateFieldStyle(input, sectionId);
                 }
             } else {
-                // BUG FIX: Only wipe input boxes on a standard shift switch if they were filled by an active Recheck loop template
-                if (input.hasAttribute('data-autofilled-recheck') || input.value === "") {
+                // FIXED: Changing the shift *after* entering data will no longer erase manual inputs
+                if (input.hasAttribute('data-autofilled-recheck')) {
                     input.value = "";
                     input.removeAttribute('data-autofilled-recheck');
                     evaluateFieldStyle(input, sectionId);
@@ -339,14 +338,16 @@
             checkboxes: runtimeCheckboxStateMemory
         };
         document.querySelectorAll('input[data-sec]').forEach(input => {
-            draft.temperatures[input.getAttribute('data-name')] = input.value;
+            if (input.value !== "") {
+                draft.temperatures[input.getAttribute('data-name')] = input.value;
+            }
         });
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
     /*
        ========================================================================
-       🛡️ REINFORCED COLD-BOOT DRAFT RESTORATION MODULE (FIXED TIMEOUTS)
+       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (TIMEOUT & SLEEP IMMUNE)
        ========================================================================
     */
     function loadSavedDraftProgressData() {
@@ -425,8 +426,6 @@
         localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
-        
-        // Remove structural form elements explicitly to prevent residual visual anomalies
         document.getElementById('dynamicWizardContainer').innerHTML = '';
         
         const sessionBtn = document.getElementById('kioskSessionBtn');
@@ -458,6 +457,7 @@
     }
 
     function pullSystemStructure() {
+        // Enforce JavaScript Promise chaining so the app structure finishes building before restoration loops fire
         return fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
@@ -471,15 +471,15 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                // Render elements if no active walk is structurally holding input streams open
-                if (!isInspectionActive) { 
-                    renderDynamicFormElements(res.structural_schema); 
-                }
-                
-                // ASYNCHRONOUS COLD-BOOT CHECK: Recover active walk data elements if iPad dropped out from a screen timeout
-                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
+                // ASYNCHRONOUS RECOVERY GATEWAY: Detects if tablet dropped out and safely hydrates the user's form
+                if (localStorage.getItem('five_star_active_draft_session')) {
+                    isInspectionActive = true;
                     renderDynamicFormElements(res.structural_schema);
                     loadSavedDraftProgressData();
+                } else {
+                    if (!isInspectionActive) { 
+                        renderDynamicFormElements(res.structural_schema); 
+                    }
                 }
                 
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
