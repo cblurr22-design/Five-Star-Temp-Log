@@ -304,7 +304,6 @@
                     evaluateFieldStyle(input, sectionId);
                 }
             } else {
-                // FIXED: Changing the shift *after* entering data will no longer erase manual inputs
                 if (input.hasAttribute('data-autofilled-recheck')) {
                     input.value = "";
                     input.removeAttribute('data-autofilled-recheck');
@@ -457,7 +456,6 @@
     }
 
     function pullSystemStructure() {
-        // Enforce JavaScript Promise chaining so the app structure finishes building before restoration loops fire
         return fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
@@ -471,7 +469,6 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                // ASYNCHRONOUS RECOVERY GATEWAY: Detects if tablet dropped out and safely hydrates the user's form
                 if (localStorage.getItem('five_star_active_draft_session')) {
                     isInspectionActive = true;
                     renderDynamicFormElements(res.structural_schema);
@@ -760,13 +757,14 @@
                 }
             }
             
-            if (labelsTimeline.length > 100) {
-                labelsTimeline = labelsTimeline.slice(-100);
-                dataPointsPlot = dataPointsPlot.slice(-100);
+            // 📉 OPTIMIZATION POINT: Slice down the chart viewport package array from 100 entries to 30 entries max
+            if (labelsTimeline.length > 30) {
+                labelsTimeline = labelsTimeline.slice(-30);
+                dataPointsPlot = dataPointsPlot.slice(-30);
             }
             if (dataPointsPlot.length === 0) return;
             
-            document.getElementById('trendModalTitle').innerText = `📈 100-Check Operational Trend Matrix: ${appleGlobalPendingAsset}`;
+            document.getElementById('trendModalTitle').innerText = `📈 30-Check Operational Trend Matrix: ${appleGlobalPendingAsset}`;
             if (globalChartInstanceReference) globalChartInstanceReference.destroy();
             
             const ctx = document.getElementById('canvasTrendTrackerNode').getContext('2d');
@@ -782,7 +780,7 @@
                             backgroundColor: 'rgba(13, 110, 253, 0.08)',
                             borderWidth: 2,
                             tension: 0.1,
-                            pointRadius: 2,
+                            pointRadius: 3,
                             pointBackgroundColor: '#0d6efd',
                             fill: true
                         },
@@ -816,7 +814,7 @@
                             suggestedMin: Math.min(...dataPointsPlot, appleGlobalPendingLimits.min) - 3,
                             suggestedMax: Math.max(...dataPointsPlot, appleGlobalPendingLimits.max) + 3
                         },
-                        x: { ticks: { font: { size: 8, weight: 'semibold' }, maxRotation: 45, minRotation: 45 } }
+                        x: { ticks: { font: { size: 9, weight: 'semibold' }, maxRotation: 45, minRotation: 45 } }
                     }
                 }
             });
