@@ -269,7 +269,7 @@
 
     /*
        ========================================================================
-       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM (FIXED SHIFT SELECTION SAVE)
+       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM
        ========================================================================
     */
     function handleShiftSelectionContextChange() {
@@ -304,7 +304,6 @@
                     evaluateFieldStyle(input, sectionId);
                 }
             } else {
-                // FIXED: Changing shift after writing numbers preserves manual typing entirely
                 if (input.hasAttribute('data-autofilled-recheck')) {
                     input.value = "";
                     input.removeAttribute('data-autofilled-recheck');
@@ -347,7 +346,7 @@
 
     /*
        ========================================================================
-       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (LOCK-SCREEN TIMEOUT IMMUNE)
+       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (WAKE & VISUAL STATE SECURE)
        ========================================================================
     */
     function loadSavedDraftProgressData() {
@@ -358,11 +357,13 @@
         isInspectionActive = true;
         clearInterval(backgroundRefreshPollerId);
         
+        // Populate standard headers
         document.getElementById('initials').value = draft.initials || "";
         document.getElementById('shift').value = draft.shift || "";
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
         
+        // Populate layout field inputs
         document.querySelectorAll('input[data-sec]').forEach(input => {
             let name = input.getAttribute('data-name');
             if (draft.temperatures && draft.temperatures[name] !== undefined) {
@@ -371,10 +372,18 @@
             }
         });
         
-        document.getElementById('masterForm').classList.remove('form-locked-state');
+        // 🚨 VISUAL TAKEOVER CRITICAL FIX: Unlock the structural layout panel containers explicitly on hard page reboots
+        const masterFormNode = document.getElementById('masterForm');
+        if (masterFormNode) {
+            masterFormNode.classList.remove('form-locked-state');
+        }
+        
+        // Reset interlock route cancel switch states
         const sessionBtn = document.getElementById('kioskSessionBtn');
-        sessionBtn.innerText = "🛑 Cancel & Reset Route";
-        sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+        if (sessionBtn) {
+            sessionBtn.innerText = "🛑 Cancel & Reset Route";
+            sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+        }
     }
 
     function toggleKioskFormInterlock() {
@@ -414,7 +423,6 @@
             });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                // FIXED: Purge local cache draft data ONLY when explicitly clicking confirmation warning
                 localStorage.removeItem('five_star_active_draft_session'); 
                 forceSessionShutdownReset();
             }
@@ -457,7 +465,6 @@
     }
 
     function pullSystemStructure() {
-        // Enforce sequential execution gates so structure builds before restoration runs
         return fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
@@ -471,14 +478,16 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                // ASYNCHRONOUS COLD-BOOT CHECK: Automatically re-open walk view if cached session memory is found on wake
+                // 🚨 STAGE CONTROLLER KEYPAD HANDSHAKE: Ensure dynamic fields render completely before restoration triggers
+                renderDynamicFormElements(res.structural_schema);
+                
                 if (localStorage.getItem('five_star_active_draft_session')) {
-                    isInspectionActive = true;
-                    renderDynamicFormElements(res.structural_schema);
                     loadSavedDraftProgressData();
                 } else {
                     if (!isInspectionActive) { 
-                        renderDynamicFormElements(res.structural_schema); 
+                        // Clean reset visualization boundary guard
+                        document.getElementById('masterForm').reset();
+                        document.getElementById('masterForm').classList.add('form-locked-state');
                     }
                 }
                 
@@ -999,7 +1008,6 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
-            // Explicitly clear local draft memory ONLY when successfully pushed to the master database
             localStorage.removeItem('five_star_active_draft_session'); 
             forceSessionShutdownReset(); 
         }).catch(err => {
