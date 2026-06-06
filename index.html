@@ -63,7 +63,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-secondary fs-6 align-middle ms-2">v3.3.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-secondary fs-6 align-middle ms-2">v4.0.0 (Offline-First Resilient)</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -261,6 +261,12 @@
         lockSubmissionOnChanges();
     }
 
+    function lockSubmissionOnChanges() {
+        document.getElementById('finalSubmitBtn').disabled = true;
+        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
+        document.getElementById('validateActionsBtn').style.display = "none";
+    }
+
     /*
        ========================================================================
        🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM
@@ -338,15 +344,9 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
-    function lockSubmissionOnChanges() {
-        document.getElementById('finalSubmitBtn').disabled = true;
-        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
-        document.getElementById('validateActionsBtn').style.display = "none";
-    }
-
     /*
        ========================================================================
-       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (HARD SLEEP IMMUNE)
+       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (PURE OFFLINE-FIRST MODULE)
        ========================================================================
     */
     function forceVisualUnlockingSequence() {
@@ -375,24 +375,14 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
         
-        // 🚀 CRITICAL FIX: Loop evaluation uses a safe text field scanning interval to allow iOS to complete painting the input boxes
-        var hydrationAttemptsCount = 0;
-        var structuralHydrationTimer = setInterval(function() {
-            var liveInputsOnFloorMesh = document.querySelectorAll('input[data-sec]');
-            hydrationAttemptsCount++;
-            
-            if (liveInputsOnFloorMesh.length > 0 || hydrationAttemptsCount > 20) {
-                clearInterval(structuralHydrationTimer);
-                
-                liveInputsOnFloorMesh.forEach(input => {
-                    let name = input.getAttribute('data-name');
-                    if (draft.temperatures && draft.temperatures[name] !== undefined) {
-                        input.value = draft.temperatures[name];
-                        evaluateFieldStyle(input, input.getAttribute('data-sec'));
-                    }
-                });
+        // Instant synchronous evaluation to defeat iOS timing drops
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            let name = input.getAttribute('data-name');
+            if (draft.temperatures && draft.temperatures[name] !== undefined) {
+                input.value = draft.temperatures[name];
+                evaluateFieldStyle(input, input.getAttribute('data-sec'));
             }
-        }, 50);
+        });
     }
 
     function toggleKioskFormInterlock() {
@@ -412,6 +402,13 @@
             .then(res => {
                 if (res.status === "success") {
                     activeStructuralMap = res.structural_schema;
+                    
+                    // Offline Cache Insurance: Bake structural schema layout to hardware storage permanently
+                    localStorage.setItem('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
+                    if (res.display_order_map || res.sequence_map || res.walkway_sequence_map) {
+                        let ord = res.display_order_map || res.sequence_map || res.walkway_sequence_map;
+                        localStorage.setItem('five_star_hardware_order_map', JSON.stringify(ord));
+                    }
                     
                     if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                     else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
@@ -474,17 +471,37 @@
     }
 
     function pullSystemStructure() {
-        // 🎯 BOOTSTRAP PASSTHROUGH GATEWAY: Instantly lock UI in active layout state before network lag hits, stopping start-screen flicker on wake
+        // 🚀 THE OFFLINE SHIELD GATEWAY: If active data exists in storage, mount layout instantly without waiting for Wi-Fi lag
         if (localStorage.getItem('five_star_active_draft_session')) {
-            forceVisualUnlockingSequence();
+            isInspectionActive = true;
+            let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
+            let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
+            
+            if (offlineSchemaRaw) {
+                activeStructuralMap = JSON.parse(offlineSchemaRaw);
+                if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
+                
+                // Build dynamic element blocks offline immediately (Takes 5 milliseconds)
+                renderDynamicFormElements(activeStructuralMap);
+                loadSavedDraftProgressData();
+                forceVisualUnlockingSequence();
+            }
         }
 
+        // Live Cloud Update continues cleanly in background channel without breaking active UI data entries
         return fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 activeStructuralMap = res.structural_schema;
                 
+                // Continuously update hardware structural profile caches
+                localStorage.setItem('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
+                if (res.display_order_map || res.sequence_map || res.walkway_sequence_map) {
+                    let ord = res.display_order_map || res.sequence_map || res.walkway_sequence_map;
+                    localStorage.setItem('five_star_hardware_order_map', JSON.stringify(ord));
+                }
+
                 if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                 else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
@@ -492,15 +509,16 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                renderDynamicFormElements(res.structural_schema);
-                
-                if (localStorage.getItem('five_star_active_draft_session')) {
-                    loadSavedDraftProgressData();
-                } else {
+                // Only trigger dynamic form rebuilds if user isn't physically typing data entries right now
+                if (!localStorage.getItem('five_star_active_draft_session')) {
                     if (!isInspectionActive) { 
+                        renderDynamicFormElements(res.structural_schema);
                         document.getElementById('masterForm').reset();
                         document.getElementById('masterForm').classList.add('form-locked-state');
                     }
+                } else {
+                    // Double check values remain cleanly bound during background cloud hydration sync handshakes
+                    loadSavedDraftProgressData();
                 }
                 
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
