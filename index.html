@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Five Star Refrigeration Check System</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -63,7 +65,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-secondary fs-6 align-middle ms-2">v4.0.0 (Offline-First Resilient)</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v6.0.0 (On-Demand Sync Fixed)</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -78,19 +80,22 @@
                     <button type="button" class="btn btn-outline-primary btn-sm history-nav-btn" id="navLiveBtn" onclick="jumpToLiveStream()">Live</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm history-nav-btn" id="navNextBtn" onclick="navigateHistory(1)">Forward ▶</button>
                 </div>
-                <span id="dashboardModeIndicator" class="badge bg-success live-indicator">● Real-Time Cloud</span>
+                <span id="dashboardModeIndicator" class="badge bg-success live-indicator">● Local Mode</span>
             </div>
             <div class="text-end" style="max-width: 50%;">
-                <span class="text-muted d-block small mb-0 fw-semibold" id="latestLogMeta">Fetching entries...</span>
-                <span class="weather-meta-text" id="dashboardWeatherView">Weather Knox (46534): Syncing...</span>
-                <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6 mt-2" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Logged</span>
+                <span class="text-muted d-block small mb-0 fw-semibold" id="latestLogMeta">Local Memory Profile Loaded</span>
+                <span class="weather-meta-text" id="dashboardWeatherView">Weather: Cached Offline</span>
+                <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6 mt-2" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Loaded</span>
             </div>
         </div>
-        <div class="dashboard-grid" id="fullWidthStatusDashboard">Loading active floor metrics configuration...</div>
+        <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate the dashboard metrics for the first time.</div>
     </div>
 
     <div class="card p-3 mb-4 bg-light border-warning">
-        <h5 class="text-dark fw-bold mb-2">⚙️ Manager Asset Governance Console</h5>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="text-dark fw-bold mb-0">⚙️ Manager Asset Governance Console</h5>
+            <button type="button" id="manualCloudSyncBtn" onclick="executeManualCloudSyncHandshake()" class="btn btn-primary fw-bold shadow-sm btn-sm px-4">🔄 Sync Cloud Database Structure</button>
+        </div>
         <div class="row g-2">
             <div class="col-md-3">
                 <select id="mgmtSection" class="form-select form-select-sm">
@@ -180,8 +185,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbwzuacLcc1hszemBVo3S-hWtfP57tSx7ZpKlyWFOBrE8DMjXtiDgdCfLToFFQqqUJyH/exec";
-
     const limitsSchema = {
         sec1: { title: "🥛 1. Dairy / Refrigerated", min: 28.5, max: 40 },
         sec2: { title: "🍦 2. Ice Cream / Frozen", min: -15, max: 10 },
@@ -194,7 +197,6 @@
     let activeStructuralMap = {};
     let localCacheHistory = []; 
     let currentViewerIndex = -1; 
-    let backgroundRefreshPollerId = null; 
     let isInspectionActive = false;
     let runtimeCheckboxStateMemory = {};
     let globalChartInstanceReference = null; 
@@ -209,37 +211,10 @@
     let clientObservedCond = "Clear Sky";
     
     let activeDashboardMemoryCache = {};
-    let absoluteLastSyncTimestampMemory = Date.now();
 
     function updateLiveClockAndWeather() {
         const now = new Date();
         document.getElementById('liveClock').innerText = now.toLocaleString();
-        
-        fetch('https://api.open-meteo.com/v1/forecast?latitude=41.2959&longitude=-86.6222&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
-        .then(res => res.json())
-        .then(data => {
-            if (data && data.current) {
-                let rawTemp = data.current.temperature_2m !== undefined ? data.current.temperature_2m : 72;
-                clientObservedTemp = Math.round(rawTemp) + "°F";
-                
-                const code = data.current.weather_code !== undefined ? data.current.weather_code : 0;
-                if (code === 0) clientObservedCond = "Clear Sky";
-                else if (code <= 3) clientObservedCond = "Partly Cloudy";
-                else if (code <= 65) clientObservedCond = "Rain Showers";
-                else clientObservedCond = "Overcast";
-                
-                if (currentViewerIndex === -1) {
-                    const weatherViewNode = document.getElementById('dashboardWeatherView');
-                    if (weatherViewNode) {
-                        weatherViewNode.innerText = `Weather Knox (46534): ${clientObservedTemp} | ${clientObservedCond}`;
-                    }
-                }
-            }
-        }).catch(err => {
-            console.log("Weather service unreachable. Rolling over to safe local fallbacks.");
-            clientObservedTemp = "72°F";
-            clientObservedCond = "Clear Sky";
-        });
     }
 
     function determineStatusClass(value, limits) {
@@ -267,11 +242,6 @@
         document.getElementById('validateActionsBtn').style.display = "none";
     }
 
-    /*
-       ========================================================================
-       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM
-       ========================================================================
-    */
     function handleShiftSelectionContextChange() {
         saveDraftProgressData();
         const selectedShiftValue = document.getElementById('shift').value;
@@ -344,15 +314,8 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
-    /*
-       ========================================================================
-       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (PURE OFFLINE-FIRST MODULE)
-       ========================================================================
-    */
     function forceVisualUnlockingSequence() {
         isInspectionActive = true;
-        clearInterval(backgroundRefreshPollerId);
-        
         const masterFormNode = document.getElementById('masterForm');
         if (masterFormNode) masterFormNode.classList.remove('form-locked-state');
         
@@ -375,7 +338,6 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
         
-        // Instant synchronous evaluation to defeat iOS timing drops
         document.querySelectorAll('input[data-sec]').forEach(input => {
             let name = input.getAttribute('data-name');
             if (draft.temperatures && draft.temperatures[name] !== undefined) {
@@ -391,42 +353,25 @@
         
         if (!isInspectionActive) {
             isInspectionActive = true;
-            clearInterval(backgroundRefreshPollerId); 
             runtimeCheckboxStateMemory = {};
             
-            sessionBtn.innerText = "⏳ Syncing Store Database Layout...";
-            sessionBtn.className = "btn btn-secondary fw-bold px-4 shadow-sm";
-            
-            fetch(cloudSpreadsheetURL)
-            .then(res => res.json())
-            .then(res => {
-                if (res.status === "success") {
-                    activeStructuralMap = res.structural_schema;
-                    
-                    // Offline Cache Insurance: Bake structural schema layout to hardware storage permanently
-                    localStorage.setItem('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
-                    if (res.display_order_map || res.sequence_map || res.walkway_sequence_map) {
-                        let ord = res.display_order_map || res.sequence_map || res.walkway_sequence_map;
-                        localStorage.setItem('five_star_hardware_order_map', JSON.stringify(ord));
-                    }
-                    
-                    if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
-                    else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
-                    else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
-                    else rawCloudSequenceMap = {};
-                    
-                    renderDynamicFormElements(res.structural_schema);
-                    if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                    if (res.current_status) activeDashboardMemoryCache = res.current_status;
-                    
-                    targetForm.classList.remove('form-locked-state');
-                    sessionBtn.innerText = "🛑 Cancel & Reset Route";
-                    sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-                    saveDraftProgressData(); 
-                    
-                    setTimeout(focusInitialWalkwayElement, 500);
-                }
-            });
+            // Build the form completely offline instantly using local hardware storage profile map
+            let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
+            if (offlineSchemaRaw) {
+                activeStructuralMap = JSON.parse(offlineSchemaRaw);
+                let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
+                if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
+                
+                renderDynamicFormElements(activeStructuralMap);
+                targetForm.classList.remove('form-locked-state');
+                sessionBtn.innerText = "🛑 Cancel & Reset Route";
+                sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+                saveDraftProgressData();
+                setTimeout(focusInitialWalkwayElement, 500);
+            } else {
+                alert("📋 System layout data missing in internal hardware cache. Please click 'Sync Cloud Database Structure' to calibrate device.");
+                isInspectionActive = false;
+            }
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
                 localStorage.removeItem('five_star_active_draft_session'); 
@@ -447,83 +392,104 @@
         sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
         
         lockSubmissionOnChanges();
-        pullSystemStructure();
-        
-        absoluteLastSyncTimestampMemory = Date.now();
-        startAutomaticDashboardPolling(); 
+        bootUpOfflineFirstWorkspace();
     }
 
-    function startAutomaticDashboardPolling() {
-        clearInterval(backgroundRefreshPollerId);
-        
-        backgroundRefreshPollerId = setInterval(() => {
-            const rightNow = Date.now();
-            const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
-            
-            if (!isInspectionActive && currentViewerIndex === -1) {
-                if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
-                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
-                    absoluteLastSyncTimestampMemory = rightNow;
-                    pullSystemStructure(); 
-                }
-            }
-        }, 30000); 
-    }
+    /*
+       ========================================================================
+       🔄 MANUAL ON-DEMAND SYNC Link (CRITICAL ENGINE OVERRIDE)
+       ========================================================================
+    */
+    function executeManualCloudSyncHandshake() {
+        const syncBtn = document.getElementById('manualCloudSyncBtn');
+        syncBtn.innerText = "⏳ Connecting to Cloud Stream...";
+        syncBtn.disabled = true;
 
-    function pullSystemStructure() {
-        // 🚀 THE OFFLINE SHIELD GATEWAY: If active data exists in storage, mount layout instantly without waiting for Wi-Fi lag
-        if (localStorage.getItem('five_star_active_draft_session')) {
-            isInspectionActive = true;
-            let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
-            let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
-            
-            if (offlineSchemaRaw) {
-                activeStructuralMap = JSON.parse(offlineSchemaRaw);
-                if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
-                
-                // Build dynamic element blocks offline immediately (Takes 5 milliseconds)
-                renderDynamicFormElements(activeStructuralMap);
-                loadSavedDraftProgressData();
-                forceVisualUnlockingSequence();
+        // Fetch local Knox weather metrics on call execution 
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=41.2959&longitude=-86.6222&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.current) {
+                let rawTemp = data.current.temperature_2m !== undefined ? data.current.temperature_2m : 72;
+                clientObservedTemp = Math.round(rawTemp) + "°F";
+                const code = data.current.weather_code !== undefined ? data.current.weather_code : 0;
+                if (code === 0) clientObservedCond = "Clear Sky";
+                else if (code <= 3) clientObservedCond = "Partly Cloudy";
+                else if (code <= 65) clientObservedCond = "Rain Showers";
+                else clientObservedCond = "Overcast";
             }
-        }
+        }).catch(() => {});
 
-        // Live Cloud Update continues cleanly in background channel without breaking active UI data entries
-        return fetch(cloudSpreadsheetURL)
+        // Fetch master layout updates from the cloud spreadsheet context links
+        fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 activeStructuralMap = res.structural_schema;
                 
-                // Continuously update hardware structural profile caches
+                // Write copies to local safety cache storage hardware partitions
                 localStorage.setItem('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
+                localStorage.setItem('five_star_historical_cache', JSON.stringify(res.historical_ledger_packages || []));
+                localStorage.setItem('five_star_status_cache', JSON.stringify(res.current_status || {}));
+                localStorage.setItem('five_star_meta_log', res.meta_last_log || "");
+                
                 if (res.display_order_map || res.sequence_map || res.walkway_sequence_map) {
                     let ord = res.display_order_map || res.sequence_map || res.walkway_sequence_map;
                     localStorage.setItem('five_star_hardware_order_map', JSON.stringify(ord));
+                    rawCloudSequenceMap = ord;
                 }
 
-                if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
-                else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
-                else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
-                
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                // Only trigger dynamic form rebuilds if user isn't physically typing data entries right now
-                if (!localStorage.getItem('five_star_active_draft_session')) {
-                    if (!isInspectionActive) { 
-                        renderDynamicFormElements(res.structural_schema);
-                        document.getElementById('masterForm').reset();
-                        document.getElementById('masterForm').classList.add('form-locked-state');
-                    }
-                } else {
-                    // Double check values remain cleanly bound during background cloud hydration sync handshakes
-                    loadSavedDraftProgressData();
+                if (!isInspectionActive) {
+                    renderDynamicFormElements(res.structural_schema);
                 }
                 
-                if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
+                processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
+                syncBtn.innerText = "✅ Sync Complete";
+                setTimeout(() => {
+                    syncBtn.innerText = "🔄 Sync Cloud Database Structure";
+                    syncBtn.disabled = false;
+                }, 2000);
             }
+        }).catch(err => {
+            alert("⚠️ Connection Timeout. Google Sheet backend unreachable over store Wi-Fi network link.");
+            syncBtn.innerText = "🔄 Sync Cloud Database Structure";
+            syncBtn.disabled = false;
         });
+    }
+
+    /*
+       ========================================================================
+       🛡️ PURE OFFLINE BOOTSTRAP PROTOCOL
+       ========================================================================
+    */
+    function bootUpOfflineFirstWorkspace() {
+        let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
+        let offlineHistRaw = localStorage.getItem('five_star_historical_cache');
+        let offlineStatusRaw = localStorage.getItem('five_star_status_cache');
+        let offlineMetaRaw = localStorage.getItem('five_star_meta_log') || "Cached Local Mirror";
+        let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
+
+        if (offlineSchemaRaw) {
+            activeStructuralMap = JSON.parse(offlineSchemaRaw);
+            if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
+            if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
+            if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
+
+            renderDynamicFormElements(activeStructuralMap);
+
+            if (localStorage.getItem('five_star_active_draft_session')) {
+                loadSavedDraftProgressData();
+            } else {
+                if (!isInspectionActive) {
+                    document.getElementById('masterForm').reset();
+                    document.getElementById('masterForm').classList.add('form-locked-state');
+                }
+            }
+            processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
+        }
     }
 
     function renderDynamicFormElements(schema) {
@@ -682,9 +648,9 @@
     function jumpToLiveStream() {
         currentViewerIndex = -1;
         const modeInd = document.getElementById('dashboardModeIndicator');
-        modeInd.innerText = "● Real-Time Cloud";
+        modeInd.innerText = "● Local Mode";
         modeInd.className = "badge bg-success live-indicator";
-        pullSystemStructure();
+        bootUpOfflineFirstWorkspace();
     }
 
     function processDashboardViewUpdate(statusMap, isLiveCloudData, metaString) {
@@ -1034,6 +1000,8 @@
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
             localStorage.removeItem('five_star_active_draft_session'); 
+            
+            // Recheck safety baseline cleanup loop targets
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
@@ -1066,14 +1034,16 @@
             document.getElementById('mgmtCoolerName').value = '';
             document.getElementById('mgmtPlacementOrder').value = '';
             document.getElementById('mgmtAuthCode').value = '';
-            setTimeout(pullSystemStructure, 1000);
+            
+            // Execute manual sync override cascade to update elements dynamically on panel registration shifts
+            executeManualCloudSyncHandshake();
         });
     }
 
     window.onload = function() {
-        absoluteLastSyncTimestampMemory = Date.now();
-        pullSystemStructure();
-        startAutomaticDashboardPolling(); 
+        updateLiveClockAndWeather();
+        // Fire clean offline boot parameter scan checks immediately on window load triggers
+        bootUpOfflineFirstWorkspace();
     };
 </script>
 </body>
