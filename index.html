@@ -62,13 +62,12 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v8.0.0 (State-Free Matrix)</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v8.1.0 (Callback Lock)</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
-    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -89,7 +88,6 @@
         <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard metrics.</div>
     </div>
 
-    <!-- Manager Asset Console -->
     <div class="card p-3 mb-4 bg-light border-warning">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="text-dark fw-bold mb-0">⚙️ Manager Asset Governance Console</h5>
@@ -124,17 +122,14 @@
         </div>
     </div>
 
-    <!-- Digital Input Worksheet Panel Area -->
     <div class="row">
         <div class="col-12 col-lg-7">
             <div class="card p-4 shadow-sm border-primary" style="border-width: 2px;">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
                     <h4 class="text-secondary mb-0">📝 Digital Floor Log Sheet</h4>
-                    <!-- 🎯 Visual state controller button removed: Sheet runs permanently unlocked -->
                     <button type="button" onclick="executeManualClearDiscard()" class="btn btn-outline-danger fw-bold btn-sm px-3 shadow-sm">🗑️ Reset Active Grid Values</button>
                 </div>
                 
-                <!-- 🚀 form-locked-state completely stripped out. Form is active permanently -->
                 <form id="masterForm" novalidate>
                     <div class="row mb-4 bg-light p-3 rounded border">
                         <div class="col-6">
@@ -315,6 +310,11 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
+    /*
+       ========================================================================
+       🛡️ DETERMINISTIC SYNC HYDRATION (ZERO RENDERING GATES)
+       ========================================================================
+    */
     function loadSavedDraftProgressData() {
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
         if (!rawDraft) return;
@@ -325,31 +325,16 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
 
-        const formContainerTarget = document.getElementById('dynamicWizardContainer');
-        const observerInstance = new MutationObserver(function(mutations, observerRef) {
-            var inputElementsMesh = document.querySelectorAll('input[data-sec]');
-            if (inputElementsMesh.length > 0) {
-                observerRef.disconnect();
-                inputElementsMesh.forEach(input => {
-                    let name = input.getAttribute('data-name');
-                    if (draft.temperatures && draft.temperatures[name] !== undefined) {
-                        input.value = draft.temperatures[name];
-                        evaluateFieldStyle(input, input.getAttribute('data-sec'));
-                    }
-                });
-            }
-        });
-
-        observerInstance.observe(formContainerTarget, { childList: true, subtree: true });
-        
-        var instantScan = document.querySelectorAll('input[data-sec]');
-        if (instantScan.length > 0) {
-            observerInstance.disconnect();
-            instantScan.forEach(input => {
+        // Hard reference verification step guarantees matching elements accept storage rows synchronously
+        var liveInputsOnFloorMesh = document.querySelectorAll('input[data-sec]');
+        if (liveInputsOnFloorMesh.length > 0) {
+            liveInputsOnFloorMesh.forEach(input => {
                 let name = input.getAttribute('data-name');
                 if (draft.temperatures && draft.temperatures[name] !== undefined) {
                     input.value = draft.temperatures[name];
-                    evaluateFieldStyle(input, input.getAttribute('data-sec'));
+                    // Strip old error borders and render field metrics safely
+                    input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
+                    input.classList.add(determineStatusClass(parseFloat(input.value), limitsSchema[input.getAttribute('data-sec')]));
                 }
             });
         }
@@ -409,8 +394,10 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                renderDynamicFormElements(res.structural_schema);
-                loadSavedDraftProgressData();
+                // 🎯 PASSTHROUGH CALLBACK RESTORATION HANDSHAKE: Data recovery is chain-executed inside the rendering pipeline
+                renderDynamicFormElements(res.structural_schema, function() {
+                    loadSavedDraftProgressData();
+                });
                 
                 processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
                 syncBtn.innerText = "✅ Sync Complete";
@@ -439,16 +426,17 @@
             if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
             if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
 
-            renderDynamicFormElements(activeStructuralMap);
-            loadSavedDraftProgressData();
+            // 🎯 PASSTHROUGH CALLBACK RESTORATION HANDSHAKE ON BOOT/WAKE
+            renderDynamicFormElements(activeStructuralMap, function() {
+                loadSavedDraftProgressData();
+            });
             processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
         } else {
-            // First time loading file fallback matrix structure assembly
             executeManualCloudSyncHandshake();
         }
     }
 
-    function renderDynamicFormElements(schema) {
+    function renderDynamicFormElements(schema, layoutCompletionCallback) {
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
         
@@ -476,6 +464,11 @@
         }
 
         rebuildDynamicCloudSequenceArray();
+
+        // 🛡️ Deterministic Paint Anchor: Fires callback explicitly after rendering context registers elements inside layout tree
+        if (typeof layoutCompletionCallback === "function") {
+            layoutCompletionCallback();
+        }
     }
 
     function rebuildDynamicCloudSequenceArray() {
@@ -867,6 +860,7 @@
                     let targetSectionBlock = document.getElementById(`block-${firstFailedSectionId}`);
                     if (targetSectionBlock) { targetSectionBlock.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
                 }, 150);
+                
             }
             return;
         }
@@ -950,10 +944,7 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
-            
-            // Wipe hardware storage caches completely upon successful data stream completion
             localStorage.removeItem('five_star_active_draft_session'); 
-            
             document.getElementById('masterForm').reset();
             let inputs = document.querySelectorAll('input[data-sec]');
             inputs.forEach(input => {
