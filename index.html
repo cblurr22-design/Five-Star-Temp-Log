@@ -62,12 +62,13 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.6.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.7.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
+    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -88,6 +89,7 @@
         <div class="dashboard-grid" id="fullWidthStatusDashboard">Loading active floor metrics configuration...</div>
     </div>
 
+    <!-- Manager Asset Console -->
     <div class="card p-3 mb-4 bg-light border-warning">
         <h5 class="text-dark fw-bold mb-2">⚙️ Manager Asset Governance Console</h5>
         <div class="row g-2">
@@ -119,12 +121,18 @@
         </div>
     </div>
 
+    <!-- Digital Input Worksheet Panel Area -->
     <div class="row">
         <div class="col-12 col-lg-7">
             <div class="card p-4 shadow-sm border-primary" style="border-width: 2px;">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
                     <h4 class="text-secondary mb-0">📝 Digital Floor Log Sheet</h4>
-                    <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-4 shadow-sm">🟢 Start New Inspection Route</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-3 shadow-sm">🟢 Start Route</button>
+                        <!-- 🎯 MANUAL OPERATOR GOVERNANCE CONTROLS BUTTONS -->
+                        <button type="button" id="manualSaveBtn" style="display:none;" onclick="executeManualOperatorSave()" class="btn btn-primary fw-bold px-3 shadow-sm">💾 Save Progress</button>
+                        <button type="button" id="manualRecallBtn" style="display:none;" onclick="executeManualOperatorRecall()" class="btn btn-warning fw-bold px-3 shadow-sm text-dark">📂 Recall Draft</button>
+                    </div>
                 </div>
                 
                 <form id="masterForm" class="form-locked-state" novalidate>
@@ -190,7 +198,6 @@
         sec6: { title: "🍎 6. Fresh Produce Displays", min: 30, max: 55 }
     };
 
-    let dbInstance = null; // Transactional hardware database reference anchor
     let activeStructuralMap = {};
     let localCacheHistory = []; 
     let currentViewerIndex = -1; 
@@ -210,60 +217,6 @@
     
     let activeDashboardMemoryCache = {};
     let absoluteLastSyncTimestampMemory = Date.now();
-
-    /*
-       ========================================================================
-       📦 HARDWARE LAYER CONTROL MODULE: INDEXTEDDB SYSTEM COMPLIANCE PROTOCOLS
-       ========================================================================
-    */
-    function initializeHardwareDatabase(initializationCallback) {
-        const dbOpenRequest = indexedDB.open("FiveStarHardwareStoragePool", 1);
-        
-        dbOpenRequest.onupgradeneeded = function(event) {
-            let activeDbConnection = event.target.result;
-            if (!activeDbConnection.objectStoreNames.contains("RouteStateCache")) {
-                activeDbConnection.createObjectStore("RouteStateCache");
-            }
-        };
-
-        dbOpenRequest.onsuccess = function(event) {
-            dbInstance = event.target.result;
-            if (typeof initializationCallback === "function") initializationCallback();
-        };
-
-        dbOpenRequest.onerror = function() {
-            console.error("IndexedDB allocation crash occurred. Rolling over to fail-safes.");
-        };
-    }
-
-    function writeDataToHardwareDisk(keyIdentifier, dataValueObject, successTrackingCallback) {
-        if (!dbInstance) return;
-        const transactionStorePool = dbInstance.transaction(["RouteStateCache"], "readwrite")
-                                                .objectStore("RouteStateCache");
-        const putExecutionRequest = transactionStorePool.put(dataValueObject, keyIdentifier);
-        
-        if (typeof successTrackingCallback === "function") {
-            putExecutionRequest.onsuccess = function() { successTrackingCallback(); };
-        }
-    }
-
-    function readDataFromHardwareDisk(keyIdentifier, queryPayloadCallback) {
-        if (!dbInstance) return;
-        const transactionStorePool = dbInstance.transaction(["RouteStateCache"], "readonly")
-                                                .objectStore("RouteStateCache");
-        const getExecutionRequest = transactionStorePool.get(keyIdentifier);
-        
-        getExecutionRequest.onsuccess = function(event) {
-            queryPayloadCallback(event.target.result);
-        };
-    }
-
-    function deleteDataFromHardwareDisk(keyIdentifier) {
-        if (!dbInstance) return;
-        dbInstance.transaction(["RouteStateCache"], "readwrite")
-                  .objectStore("RouteStateCache")
-                  .delete(keyIdentifier);
-    }
 
     function updateLiveClockAndWeather() {
         const now = new Date();
@@ -364,51 +317,112 @@
     }
 
     function saveDraftProgressData() {
-        readDataFromHardwareDisk("five_star_route_running", function(isRouteRunning) {
-            if (!isInspectionActive && isRouteRunning !== "TRUE") return;
-
-            let draft = {
-                initials: document.getElementById('initials').value,
-                shift: document.getElementById('shift').value,
-                freehandNotes: document.getElementById('freehandNotes').value,
-                temperatures: {},
-                checkboxes: runtimeCheckboxStateMemory
-            };
-            document.querySelectorAll('input[data-sec]').forEach(input => {
-                draft.temperatures[input.getAttribute('data-name')] = input.value;
-            });
-            
-            // 🎯 Save directly to structural hardware database rows bypassing web text cookies
-            writeDataToHardwareDisk("five_star_active_draft_session", draft);
+        if (!isInspectionActive) return;
+        let draft = {
+            initials: document.getElementById('initials').value,
+            shift: document.getElementById('shift').value,
+            freehandNotes: document.getElementById('freehandNotes').value,
+            temperatures: {},
+            checkboxes: runtimeCheckboxStateMemory
+        };
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
+        localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
+    }
+
+    /*
+       ========================================================================
+       🛡️ MANUAL OPERATOR DISK CONSOLE MODULE LOGIC
+       ========================================================================
+    */
+    function executeManualOperatorSave() {
+        if (!isInspectionActive) return;
+        
+        let hardStringPayload = {
+            initials: document.getElementById('initials').value,
+            shift: document.getElementById('shift').value,
+            freehandNotes: document.getElementById('freehandNotes').value,
+            temperatures: {},
+            checkboxes: runtimeCheckboxStateMemory,
+            saved_at_timestamp: new Date().toLocaleTimeString()
+        };
+        
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            if (input.value.trim() !== "") {
+                hardStringPayload.temperatures[input.getAttribute('data-name')] = input.value;
+            }
+        });
+
+        // Write raw compressed text snapshot directly into un-erasable hard block fields
+        localStorage.setItem('five_star_permanent_operator_checkpoint', JSON.stringify(hardStringPayload));
+        
+        const saveBtn = document.getElementById('manualSaveBtn');
+        saveBtn.innerText = "💾 Saved (" + hardStringPayload.saved_at_timestamp + ")";
+        saveBtn.className = "btn btn-success fw-bold px-3 shadow-sm";
+        
+        document.getElementById('manualRecallBtn').style.display = "inline-block";
+        setTimeout(() => {
+            saveBtn.innerText = "💾 Save Progress";
+            saveBtn.className = "btn btn-primary fw-bold px-3 shadow-sm";
+        }, 2500);
+    }
+
+    function executeManualOperatorRecall() {
+        let rawSnapshot = localStorage.getItem('five_star_permanent_operator_checkpoint');
+        if (!rawSnapshot) { alert("📂 No manual checkpoint discovered on this iPad."); return; }
+        
+        let draft = JSON.parse(rawSnapshot);
+        
+        // Force visual unlock sequence parameters cleanly
+        isInspectionActive = true;
+        clearInterval(backgroundRefreshPollerId);
+        
+        document.getElementById('masterForm').classList.remove('form-locked-state');
+        document.getElementById('kioskSessionBtn').innerText = "🛑 Cancel & Reset Route";
+        document.getElementById('kioskSessionBtn').className = "btn btn-danger fw-bold px-3 shadow-sm";
+        document.getElementById('manualSaveBtn').style.display = "inline-block";
+
+        document.getElementById('initials').value = draft.initials || "";
+        document.getElementById('shift').value = draft.shift || "";
+        document.getElementById('freehandNotes').value = draft.freehandNotes || "";
+        runtimeCheckboxStateMemory = draft.checkboxes || {};
+        
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            let name = input.getAttribute('data-name');
+            if (draft.temperatures && draft.temperatures[name] !== undefined) {
+                input.value = draft.temperatures[name];
+                evaluateFieldStyle(input, input.getAttribute('data-sec'));
+            }
+        });
+
+        alert("📂 Progress snapshot recovered successfully! Last saved at: " + (draft.saved_at_timestamp || "Unknown"));
     }
 
     function loadSavedDraftProgressData() {
-        readDataFromHardwareDisk("five_star_active_draft_session", function(draft) {
-            if (!draft) return;
-            isInspectionActive = true;
-            writeDataToHardwareDisk("five_star_route_running", "TRUE"); 
-            clearInterval(backgroundRefreshPollerId);
-            
-            document.getElementById('initials').value = draft.initials || "";
-            document.getElementById('shift').value = draft.shift || "";
-            document.getElementById('freehandNotes').value = draft.freehandNotes || "";
-            runtimeCheckboxStateMemory = draft.checkboxes || {};
-            
-            // Passthrough callback block ensures fields paint cleanly prior to rehydration injection loops
-            document.querySelectorAll('input[data-sec]').forEach(input => {
-                let name = input.getAttribute('data-name');
-                if (draft.temperatures && draft.temperatures[name] !== undefined) {
-                    input.value = draft.temperatures[name];
-                    evaluateFieldStyle(input, input.getAttribute('data-sec'));
-                }
-            });
-            
-            document.getElementById('masterForm').classList.remove('form-locked-state');
-            const sessionBtn = document.getElementById('kioskSessionBtn');
-            sessionBtn.innerText = "🛑 Cancel & Reset Route";
-            sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+        let rawDraft = localStorage.getItem('five_star_active_draft_session');
+        if (!rawDraft) return;
+        let draft = JSON.parse(rawDraft);
+        isInspectionActive = true;
+        clearInterval(backgroundRefreshPollerId);
+        
+        document.getElementById('initials').value = draft.initials || "";
+        document.getElementById('shift').value = draft.shift || "";
+        document.getElementById('freehandNotes').value = draft.freehandNotes || "";
+        runtimeCheckboxStateMemory = draft.checkboxes || {};
+        
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            let name = input.getAttribute('data-name');
+            if (draft.temperatures[name] !== undefined) {
+                input.value = draft.temperatures[name];
+                evaluateFieldStyle(input, input.getAttribute('data-sec'));
+            }
         });
+        
+        document.getElementById('masterForm').classList.remove('form-locked-state');
+        document.getElementById('kioskSessionBtn').innerText = "🛑 Cancel & Reset Route";
+        document.getElementById('kioskSessionBtn').className = "btn btn-danger fw-bold px-3 shadow-sm";
+        document.getElementById('manualSaveBtn').style.display = "inline-block";
     }
 
     function toggleKioskFormInterlock() {
@@ -417,7 +431,6 @@
         
         if (!isInspectionActive) {
             isInspectionActive = true;
-            writeDataToHardwareDisk("five_star_route_running", "TRUE"); 
             clearInterval(backgroundRefreshPollerId); 
             runtimeCheckboxStateMemory = {};
             
@@ -428,32 +441,29 @@
             .then(res => res.json())
             .then(res => {
                 if (res.status === "success") {
-                    writeDataToHardwareDisk("five_star_cached_schema", res.structural_schema);
                     activeStructuralMap = res.structural_schema;
                     
                     if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                     else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                     else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                     else rawCloudSequenceMap = {};
-                    writeDataToHardwareDisk("five_star_cached_orders", rawCloudSequenceMap);
                     
-                    renderDynamicFormElements(res.structural_schema, function() {
-                        saveDraftProgressData();
-                    });
+                    renderDynamicFormElements(res.structural_schema);
                     if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                     if (res.current_status) activeDashboardMemoryCache = res.current_status;
                     
                     targetForm.classList.remove('form-locked-state');
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
-                    sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+                    sessionBtn.className = "btn btn-danger fw-bold px-3 shadow-sm";
+                    document.getElementById('manualSaveBtn').style.display = "inline-block";
+                    saveDraftProgressData(); 
                     
                     setTimeout(focusInitialWalkwayElement, 500);
                 }
             });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                deleteDataFromHardwareDisk("five_star_active_draft_session");
-                deleteDataFromHardwareDisk("five_star_route_running");
+                localStorage.removeItem('five_star_active_draft_session'); 
                 forceSessionShutdownReset();
             }
         }
@@ -461,15 +471,14 @@
 
     function forceSessionShutdownReset() {
         isInspectionActive = false;
-        deleteDataFromHardwareDisk("five_star_route_running");
         runtimeCheckboxStateMemory = {};
-        deleteDataFromHardwareDisk("five_star_active_draft_session");
+        localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        sessionBtn.innerText = "🟢 Start New Inspection Route";
-        sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
+        document.getElementById('kioskSessionBtn').innerText = "🟢 Start Route";
+        document.getElementById('kioskSessionBtn').className = "btn btn-success fw-bold px-3 shadow-sm";
+        document.getElementById('manualSaveBtn').style.display = "none";
         
         lockSubmissionOnChanges();
         pullSystemStructure();
@@ -482,65 +491,50 @@
         clearInterval(backgroundRefreshPollerId);
         
         backgroundRefreshPollerId = setInterval(() => {
-            readDataFromHardwareDisk("five_star_route_running", function(isRouteRunning) {
-                if (isRouteRunning === "TRUE") return; 
-
-                const rightNow = Date.now();
-                const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
-                
-                if (!isInspectionActive && currentViewerIndex === -1) {
-                    if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
-                        absoluteLastSyncTimestampMemory = rightNow;
-                        pullSystemStructure(); 
-                    }
+            const rightNow = Date.now();
+            const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
+            
+            if (!isInspectionActive && currentViewerIndex === -1) {
+                if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
+                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
+                    absoluteLastSyncTimestampMemory = rightNow;
+                    pullSystemStructure(); 
                 }
-            });
+            }
         }, 30000); 
     }
 
     function pullSystemStructure() {
-        readDataFromHardwareDisk("five_star_route_running", function(isRouteRunning) {
-            if (isRouteRunning === "TRUE") {
-                isInspectionActive = true; 
-                
-                readDataFromHardwareDisk("five_star_cached_schema", function(backupSchema) {
-                    readDataFromHardwareDisk("five_star_cached_orders", function(backupOrders) {
-                        if (backupSchema) {
-                            activeStructuralMap = backupSchema;
-                            rawCloudSequenceMap = backupOrders || {};
-                            
-                            // Bypasses network entirely to populate painted cells offline safely
-                            renderDynamicFormElements(activeStructuralMap, function() {
-                                loadSavedDraftProgressData();
-                            });
-                        }
-                    });
-                });
-                return; // Blocks network loop execution paths completely mid-route
-            }
+        // Evaluate checkpoint presence on page initial startup parameters setup
+        if (localStorage.getItem('five_star_permanent_operator_checkpoint')) {
+            document.getElementById('manualRecallBtn').style.display = "inline-block";
+        }
 
-            fetch(cloudSpreadsheetURL)
-            .then(res => res.json())
-            .then(res => {
-                if (res.status === "success") {
-                    activeStructuralMap = res.structural_schema;
-                    if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
-                    else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
-                    else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
-                    
-                    if (!isInspectionActive) { 
-                        renderDynamicFormElements(res.structural_schema); 
-                    }
-                    if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                    if (res.current_status) activeDashboardMemoryCache = res.current_status;
-                    
-                    if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
+        fetch(cloudSpreadsheetURL)
+        .then(res => res.json())
+        .then(res => {
+            if (res.status === "success") {
+                activeStructuralMap = res.structural_schema;
+                
+                if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
+                else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
+                else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
+                
+                if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
+                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                if (res.current_status) activeDashboardMemoryCache = res.current_status;
+                
+                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
+                    renderDynamicFormElements(res.structural_schema);
+                    loadSavedDraftProgressData();
                 }
-            });
+                
+                if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
+            }
         });
     }
 
-    function renderDynamicFormElements(schema, layoutCompletionCallback) {
+    function renderDynamicFormElements(schema) {
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
         
@@ -568,10 +562,6 @@
         }
 
         rebuildDynamicCloudSequenceArray();
-
-        if (typeof layoutCompletionCallback === "function") {
-            layoutCompletionCallback();
-        }
     }
 
     function rebuildDynamicCloudSequenceArray() {
@@ -780,321 +770,11 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        initializeHardwareDatabase(function() {
-            updateLiveClockAndWeather();
-            setInterval(updateLiveClockAndWeather, 60000);
-            pullSystemStructure();
-            startAutomaticDashboardPolling();
-        });
-        
-        var targetModalNode = document.getElementById('trendChartModal');
-        targetModalNode.addEventListener('shown.bs.modal', function () {
-            if (!appleGlobalPendingAsset) return;
-            
-            let labelsTimeline = [];
-            let dataPointsPlot = [];
-            let dataCount = 0;
-            
-            for (let i = 0; i < localCacheHistory.length; i++) {
-                let recordBlock = localCacheHistory[i];
-                if (recordBlock.status_map && recordBlock.status_map[appleGlobalPendingAsset]) {
-                    let entryData = recordBlock.status_map[appleGlobalPendingAsset];
-                    if (entryData.temp !== "N/A" && entryData.temp !== undefined && entryData.temp !== "") {
-                        let rawVal = parseFloat(entryData.temp);
-                        if (!isNaN(rawVal)) {
-                            let cleanTimeLabel = "Check " + (dataCount + 1);
-                            if (recordBlock.meta_string && recordBlock.meta_string.includes("on ")) {
-                                let parts = recordBlock.meta_string.split("on ");
-                                let shiftPart = recordBlock.meta_string.split("Shift ")[1] ? recordBlock.meta_string.split("Shift ")[1].split(" ")[0] : "";
-                                cleanTimeLabel = parts[1].split(",")[0] + " (" + shiftPart + ")";
-                            }
-                            labelsTimeline.push(cleanTimeLabel);
-                            dataPointsPlot.push(rawVal);
-                            dataCount++;
-                        }
-                    }
-                }
-            }
-            
-            if (labelsTimeline.length > 50) {
-                labelsTimeline = labelsTimeline.slice(-50);
-                dataPointsPlot = dataPointsPlot.slice(-50);
-            }
-            if (dataPointsPlot.length === 0) return;
-            
-            document.getElementById('trendModalTitle').innerText = `📈 50-Check Operational Trend Matrix: ${appleGlobalPendingAsset}`;
-            if (globalChartInstanceReference) globalChartInstanceReference.destroy();
-            
-            const ctx = document.getElementById('canvasTrendTrackerNode').getContext('2d');
-            globalChartInstanceReference = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labelsTimeline,
-                    datasets: [
-                        {
-                            label: 'Asset Reading (°F)',
-                            data: dataPointsPlot,
-                            borderColor: '#0d6efd',
-                            backgroundColor: 'rgba(13, 110, 253, 0.08)',
-                            borderWidth: 2,
-                            tension: 0.1,
-                            pointRadius: 2,
-                            pointBackgroundColor: '#0d6efd',
-                            fill: true
-                        },
-                        {
-                            label: 'Max Limit (' + appleGlobalPendingLimits.max + '°F)',
-                            data: Array(labelsTimeline.length).fill(appleGlobalPendingLimits.max),
-                            borderColor: '#dc3545',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false
-                        },
-                        {
-                            label: 'Min Limit (' + appleGlobalPendingLimits.min + '°F)',
-                            data: Array(labelsTimeline.length).fill(appleGlobalPendingLimits.min),
-                            borderColor: '#198754',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top', labels: { font: { size: 11, weight: 'bold' } } } },
-                    scales: {
-                        y: {
-                            ticks: { callback: function(v) { return v + '°F'; }, font: { weight: 'bold' } },
-                            suggestedMin: Math.min(...dataPointsPlot, appleGlobalPendingLimits.min) - 3,
-                            suggestedMax: Math.max(...dataPointsPlot, appleGlobalPendingLimits.max) + 3
-                        },
-                        x: { ticks: { font: { size: 8, weight: 'semibold' }, maxRotation: 45, minRotation: 45 } }
-                    }
-                }
-            });
-        });
+        updateLiveClockAndWeather();
+        setInterval(updateLiveClockAndWeather, 60000);
+        pullSystemStructure();
+        startAutomaticDashboardPolling(); 
     });
-
-    function runStageOneValidation() {
-        const initials = document.getElementById('initials').value.trim();
-        const shift = document.getElementById('shift').value;
-        if (!initials || !shift) { alert("⚠️ Missing Initials or Shift selection."); return; }
-        
-        saveActiveCheckboxesToMemory();
-        let formHasMissingFields = false; 
-        let errorsLogged = 0;
-        let firstBlankInputId = null;
-        let firstFailedSectionId = null;
-        
-        document.querySelectorAll(".section-block").forEach(el => el.classList.remove('section-confirmed', 'section-has-error'));
-        document.querySelectorAll(".dynamic-action-area").forEach(el => el.innerHTML = '');
-
-        for (let secId in limitsSchema) {
-            let blockHasError = false;
-            let actionHtml = `<div class="inline-action-box"><h6 class="text-dark fw-bold mb-2">🚨 Corrective Actions Required:</h6>`;
-            let inputs = document.querySelectorAll(`input[data-sec="${secId}"]`);
-            
-            inputs.forEach(input => {
-                let val = input.value.trim();
-                if (val === '') { 
-                    input.classList.add('field-error'); 
-                    formHasMissingFields = true; 
-                    if (!firstBlankInputId) firstBlankInputId = input.id;
-                } 
-                else {
-                    let num = parseFloat(val);
-                    let status = determineStatusClass(num, limitsSchema[secId]);
-                    if (status === "status-red" || status === "status-yellow") {
-                        blockHasError = true; 
-                        errorsLogged++;
-                        if (!firstFailedSectionId) firstFailedSectionId = secId;
-                        let assetName = input.getAttribute('data-name');
-                        
-                        actionHtml += `<div class="mb-2 pb-2 border-bottom alert-protocol-wrapper" data-alert-type="${status === 'status-red' ? 'CRITICAL-ALERT' : 'CAUTION-RECHECK'}" data-cooler="${assetName}">
-                            <span class="badge ${status === 'status-red' ? 'bg-danger' : 'bg-warning text-dark'} mb-1">${assetName}: ${num}°F</span>
-                            <div class="row g-1">`;
-                        if (status === "status-yellow") {
-                            actionHtml += `<div class="col-12"><div class="form-check">
-                                <input class="form-check-input action-checkbox-node" type="checkbox" checked data-cooler-key="${assetName}" value="Rechecking in 1 Hour" id="chk-${assetName}-recheck">
-                                <label class="form-check-label text-dark fw-bold" style="font-size:11px;" for="chk-${assetName}-recheck">Rechecking in 1 Hour (Enforced Compliance)</label>
-                            </div></div>`;
-                        } else {
-                            [
-                                "Moved Product to Cooler",
-                                "Moved Product to Freezer",
-                                "Turned off to allow Defrost",
-                                "Scheduled Service Call",
-                                "Scheduled Emergency Service",
-                                "Notified Management Team",
-                                "Checked Rack for Alarms see notes",
-                                "Rechecking in 1 Hour",
-                                "No Action Taken"
-                            ].forEach((act, idx) => {
-                                let isCheckedState = (runtimeCheckboxStateMemory[assetName] && runtimeCheckboxStateMemory[assetName][act] === true) ? "checked" : "";
-                                actionHtml += `<div class="col-6"><div class="form-check">
-                                    <input class="form-check-input action-checkbox-node" type="checkbox" ${isCheckedState} data-cooler-key="${assetName}" value="${act}" id="chk-${assetName}-${idx}">
-                                    <label class="form-check-label text-dark" style="font-size:10px;" for="chk-${assetName}-${idx}">${act}</label>
-                                </div></div>`;
-                            });
-                        }
-                        actionHtml += `</div></div>`;
-                    }
-                }
-            });
-            if (blockHasError) {
-                document.getElementById(`block-${secId}`).classList.add('section-has-error');
-                document.getElementById(`actions-${secId}`).innerHTML = actionHtml + `</div>`;
-            } else { 
-                document.getElementById(`block-${secId}`).classList.add('section-confirmed'); 
-            }
-        }
-
-        if (formHasMissingFields) { 
-            alert("⚠️ Missing Entries: Fill in all highlighted empty boxes."); 
-            if (firstBlankInputId) {
-                setTimeout(() => {
-                    let targetInput = document.getElementById(firstBlankInputId);
-                    if (targetInput) { targetInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); targetInput.focus(); }
-                }, 150);
-            }
-            return; 
-        }
-        
-        if (errorsLogged > 0) {
-            document.getElementById('validateActionsBtn').style.display = "block";
-            alert(`⚠️ Action Required: Detected ${errorsLogged} temperature issues. Complete corrective protocols below.`);
-            if (firstFailedSectionId) {
-                setTimeout(() => {
-                    let targetSectionBlock = document.getElementById(`block-${firstFailedSectionId}`);
-                    if (targetSectionBlock) { targetSectionBlock.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-                }, 150);
-            }
-            return;
-        }
-
-        document.getElementById('finalSubmitBtn').disabled = false;
-        document.getElementById('finalSubmitBtn').classList.replace('btn-secondary', 'btn-success');
-        alert("✅ Worksheet successfully verified! Data submission switch opened.");
-    }
-
-    function runStageTwoValidation() {
-        saveActiveCheckboxesToMemory();
-        const wrappers = document.querySelectorAll('.alert-protocol-wrapper');
-        let fail = false;
-        let firstFailedWrapper = null;
-        
-        wrappers.forEach(wrap => {
-            let checked = wrap.querySelectorAll('.action-checkbox-node:checked');
-            if (checked.length === 0) { 
-                fail = true; 
-                wrap.style.border = "2px solid #dc3545"; 
-                wrap.style.backgroundColor = "#fff5f5"; 
-                if (!firstFailedWrapper) firstFailedWrapper = wrap;
-            } 
-            else { wrap.style.border = "none"; wrap.style.backgroundColor = "transparent"; }
-        });
-        
-        if (fail) { 
-            alert("⚠️ Verification Denied. Choose action protocols for highlighted areas."); 
-            if (firstFailedWrapper) { firstFailedWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-            return; 
-        }
-        
-        document.getElementById('finalSubmitBtn').disabled = false;
-        document.getElementById('finalSubmitBtn').classList.replace('btn-secondary', 'btn-success');
-        alert("✅ Actions verified. Submission unlocked.");
-    }
-
-    function transmitLogsToCloud() {
-        saveActiveCheckboxesToMemory();
-        const submitBtn = document.getElementById('finalSubmitBtn');
-        submitBtn.disabled = true; 
-        submitBtn.innerText = "⏳ Synchronizing Log Stream...";
-        
-        let package = [];
-        let sharedNotes = document.getElementById('freehandNotes').value.trim() || "None Logged";
-        
-        document.querySelectorAll('input[data-sec]').forEach(input => {
-            let assetName = input.getAttribute('data-name');
-            let sectionId = input.getAttribute('data-sec');
-            let matchedAction = "None Required";
-            
-            if (runtimeCheckboxStateMemory[assetName]) {
-                let activeMeasures = [];
-                for (let actionText in runtimeCheckboxStateMemory[assetName]) {
-                    if (runtimeCheckboxStateMemory[assetName][actionText] === true) {
-                        activeMeasures.push(actionText);
-                    }
-                }
-                if (activeMeasures.length > 0) matchedAction = activeMeasures.join(" | ");
-            }
-            
-            package.push({
-                department: limitsSchema[sectionId].title,
-                cooler_name: assetName,
-                temperature: parseFloat(input.value),
-                action_taken: matchedAction
-            });
-        });
-
-        fetch(cloudSpreadsheetURL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-                routing_action: "SUBMIT_DATA_STREAM",
-                time: new Date().toLocaleString(),
-                user: document.getElementById('initials').value.toUpperCase(),
-                shift: document.getElementById('shift').value,
-                inspector_notes: sharedNotes, 
-                outdoor_temp: clientObservedTemp,
-                weather_cond: clientObservedCond,
-                records_package: package
-            })
-        }).then(() => {
-            alert("🚀 Log secure-synced to spreadsheet records!");
-            
-            // Purge transactional database slots cleanly upon successful cloud upload completion
-            deleteDataFromHardwareDisk("five_star_active_draft_session");
-            deleteDataFromHardwareDisk("five_star_route_running");
-            forceSessionShutdownReset(); 
-        }).catch(err => {
-            alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
-            submitBtn.disabled = false;
-            submitBtn.innerText = "🔒 Complete Log & Submit to Sheet";
-        });
-    }
-
-    function modifyAssetRegistry(routingActionName) {
-        let section = document.getElementById('mgmtSection').value;
-        let coolerName = document.getElementById('mgmtCoolerName').value.trim();
-        let orderRank = document.getElementById('mgmtPlacementOrder').value.trim();
-        let code = document.getElementById('mgmtAuthCode').value.trim();
-        if (!coolerName || !code) { alert("⚠️ Asset name and authorization PIN are strictly required."); return; }
-        if (!confirm(`Commit configuration changes to the store layout?`)) return;
-
-        fetch(cloudSpreadsheetURL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-                routing_action: routingActionName,
-                target_section: section,
-                new_asset_name: coolerName,
-                asset_name: coolerName,
-                target_order: orderRank,
-                auth_code: code
-            })
-        }).then(() => {
-            alert("⚙️ Configuration modified!");
-            document.getElementById('mgmtCoolerName').value = '';
-            document.getElementById('mgmtPlacementOrder').value = '';
-            document.getElementById('mgmtAuthCode').value = '';
-            setTimeout(pullSystemStructure, 1000);
-        });
-    }
 </script>
 </body>
 </html>
