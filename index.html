@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Five Star Refrigeration Check System</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -65,7 +63,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.4.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.1.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -80,22 +78,19 @@
                     <button type="button" class="btn btn-outline-primary btn-sm history-nav-btn" id="navLiveBtn" onclick="jumpToLiveStream()">Live</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm history-nav-btn" id="navNextBtn" onclick="navigateHistory(1)">Forward ▶</button>
                 </div>
-                <span id="dashboardModeIndicator" class="badge bg-success live-indicator">● Local Mode</span>
+                <span id="dashboardModeIndicator" class="badge bg-success live-indicator">● Real-Time Cloud</span>
             </div>
             <div class="text-end" style="max-width: 50%;">
-                <span class="text-muted d-block small mb-0 fw-semibold" id="latestLogMeta">Local Memory Profile Loaded</span>
-                <span class="weather-meta-text" id="dashboardWeatherView">Weather: Cached Offline</span>
-                <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6 mt-2" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Loaded</span>
+                <span class="text-muted d-block small mb-0 fw-semibold" id="latestLogMeta">Fetching entries...</span>
+                <span class="weather-meta-text" id="dashboardWeatherView">Weather Knox (46534): Syncing...</span>
+                <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6 mt-2" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Logged</span>
             </div>
         </div>
-        <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard lights parameters.</div>
+        <div class="dashboard-grid" id="fullWidthStatusDashboard">Loading active floor metrics configuration...</div>
     </div>
 
     <div class="card p-3 mb-4 bg-light border-warning">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="text-dark fw-bold mb-0">⚙️ Manager Asset Governance Console</h5>
-            <button type="button" id="manualCloudSyncBtn" onclick="executeManualCloudSyncHandshake()" class="btn btn-primary fw-bold shadow-sm btn-sm px-4">🔄 Sync Cloud Database Structure</button>
-        </div>
+        <h5 class="text-dark fw-bold mb-2">⚙️ Manager Asset Governance Console</h5>
         <div class="row g-2">
             <div class="col-md-3">
                 <select id="mgmtSection" class="form-select form-select-sm">
@@ -196,19 +191,10 @@
         sec6: { title: "🍎 6. Fresh Produce Displays", min: 30, max: 55 }
     };
 
-    // 📋 EMERGENCY FALLBACK SCHEMA: Ensures application logic compiles even if localStorage drops
-    const embeddedHardcodedBackupSchema = {
-        sec1: ["Dairy Case 1", "Dairy Case 2", "Milk Walk-In"],
-        sec2: ["Ice Cream Door 1", "Ice Cream Door 2"],
-        sec3: ["Frozen Pizza", "Frozen Meals"],
-        sec4: ["Fresh Beef Case", "Seafood Display"],
-        sec5: ["Sliced Deli Meat", "Cheese Island"],
-        sec6: ["Wet Produce Wet-Rack", "Apple Table"]
-    };
-
     let activeStructuralMap = {};
     let localCacheHistory = []; 
     let currentViewerIndex = -1; 
+    let backgroundRefreshPollerId = null; 
     let isInspectionActive = false;
     let runtimeCheckboxStateMemory = {};
     let globalChartInstanceReference = null; 
@@ -221,81 +207,39 @@
 
     let clientObservedTemp = "72°F";
     let clientObservedCond = "Clear Sky";
+    
     let activeDashboardMemoryCache = {};
-    let wakeLockInstance = null; 
-    let databaseEngineInstance = null; // IndexedDB persistent database reference object
-
-    // ========================================================================
-    // 🛠️ HARDWARE PERSISTENCE LEVEL INDEPENDENT DATABASE ENGINE (INDEXEDDB)
-    // ========================================================================
-    function initializePersistentStoragePipeline(callbackSuccess) {
-        const request = indexedDB.open("FiveStarInspectionDB", 2);
-        
-        request.onupgradeneeded = function(e) {
-            let db = e.target.result;
-            if (!db.objectStoreNames.contains("inspectionStore")) {
-                db.createObjectStore("inspectionStore");
-            }
-        };
-        
-        request.onsuccess = function(e) {
-            databaseEngineInstance = e.target.result;
-            if (callbackSuccess) callbackSuccess();
-        };
-        
-        request.onerror = function(e) {
-            console.error("Database layer breakdown. Defaulting to system fallback streams.");
-            if (callbackSuccess) callbackSuccess();
-        };
-    }
-
-    function readSecureDataRecord(key, callback) {
-        if (!databaseEngineInstance) {
-            callback(localStorage.getItem(key));
-            return;
-        }
-        try {
-            const tx = databaseEngineInstance.transaction("inspectionStore", "readonly");
-            const store = tx.objectStore("inspectionStore");
-            const req = store.get(key);
-            req.onsuccess = function() {
-                callback(req.result || localStorage.getItem(key));
-            };
-            req.onerror = function() {
-                callback(localStorage.getItem(key));
-            };
-        } catch(e) {
-            callback(localStorage.getItem(key));
-        }
-    }
-
-    function writeSecureDataRecord(key, value) {
-        localStorage.setItem(key, value); // Leave as secondary memory reference mirror
-        if (!databaseEngineInstance) return;
-        try {
-            const tx = databaseEngineInstance.transaction("inspectionStore", "readwrite");
-            const store = tx.objectStore("inspectionStore");
-            store.put(value, key);
-        } catch(e) {
-            console.error("Failed write lock tracking operation.", e);
-        }
-    }
-
-    function deleteSecureDataRecord(key) {
-        localStorage.removeItem(key);
-        if (!databaseEngineInstance) return;
-        try {
-            const tx = databaseEngineInstance.transaction("inspectionStore", "readwrite");
-            const store = tx.objectStore("inspectionStore");
-            store.delete(key);
-        } catch(e) {
-            console.error("Purge failure trace handled.");
-        }
-    }
+    let absoluteLastSyncTimestampMemory = Date.now();
 
     function updateLiveClockAndWeather() {
         const now = new Date();
         document.getElementById('liveClock').innerText = now.toLocaleString();
+        
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=41.2959&longitude=-86.6222&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.current) {
+                let rawTemp = data.current.temperature_2m !== undefined ? data.current.temperature_2m : 72;
+                clientObservedTemp = Math.round(rawTemp) + "°F";
+                
+                const code = data.current.weather_code !== undefined ? data.current.weather_code : 0;
+                if (code === 0) clientObservedCond = "Clear Sky";
+                else if (code <= 3) clientObservedCond = "Partly Cloudy";
+                else if (code <= 65) clientObservedCond = "Rain Showers";
+                else clientObservedCond = "Overcast";
+                
+                if (currentViewerIndex === -1) {
+                    const weatherViewNode = document.getElementById('dashboardWeatherView');
+                    if (weatherViewNode) {
+                        weatherViewNode.innerText = `Weather Knox (46534): ${clientObservedTemp} | ${clientObservedCond}`;
+                    }
+                }
+            }
+        }).catch(err => {
+            console.log("Weather service unreachable. Rolling over to safe local fallbacks.");
+            clientObservedTemp = "72°F";
+            clientObservedCond = "Clear Sky";
+        });
     }
 
     function determineStatusClass(value, limits) {
@@ -318,12 +262,9 @@
     }
 
     function lockSubmissionOnChanges() {
-        readSecureDataRecord('five_star_form_validation_locked', function(val) {
-            if(val === 'TRUE') return;
-            document.getElementById('finalSubmitBtn').disabled = true;
-            document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
-            document.getElementById('validateActionsBtn').style.display = "none";
-        });
+        document.getElementById('finalSubmitBtn').disabled = true;
+        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
+        document.getElementById('validateActionsBtn').style.display = "none";
     }
 
     function handleShiftSelectionContextChange() {
@@ -345,11 +286,9 @@
                         
                         if (priorStatusClass === "status-green") {
                             input.value = priorTemperatureValue;
-                            input.setAttribute('data-autofilled-recheck', 'true');
                             evaluateFieldStyle(input, sectionId);
                         } else {
                             input.value = "";
-                            input.removeAttribute('data-autofilled-recheck');
                             evaluateFieldStyle(input, sectionId);
                         }
                     }
@@ -358,11 +297,8 @@
                     evaluateFieldStyle(input, sectionId);
                 }
             } else {
-                if (input.hasAttribute('data-autofilled-recheck')) {
-                    input.value = "";
-                    input.removeAttribute('data-autofilled-recheck');
-                    evaluateFieldStyle(input, sectionId);
-                }
+                input.value = "";
+                evaluateFieldStyle(input, sectionId);
             }
         });
         
@@ -391,156 +327,75 @@
             checkboxes: runtimeCheckboxStateMemory
         };
         document.querySelectorAll('input[data-sec]').forEach(input => {
-            if (input.value !== "") {
-                draft.temperatures[input.getAttribute('data-name')] = input.value;
-            }
+            draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
-        writeSecureDataRecord('five_star_active_draft_session', JSON.stringify(draft));
-    }
-
-    function forceVisualUnlockingSequence() {
-        isInspectionActive = true;
-        writeSecureDataRecord('five_star_kiosk_layout_interlock_active', 'TRUE');
-        
-        const masterFormNode = document.getElementById('masterForm');
-        if (masterFormNode) masterFormNode.classList.remove('form-locked-state');
-        
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        if (sessionBtn) {
-            sessionBtn.innerText = "🛑 Cancel & Reset Route";
-            sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-        }
-    }
-
-    function applyGlobalInputLockdownState(shouldLock) {
-        document.getElementById('initials').disabled = shouldLock;
-        document.getElementById('shift').disabled = shouldLock;
-        document.getElementById('freehandNotes').disabled = shouldLock;
-        document.getElementById('validateFormBtn').disabled = shouldLock;
-        
-        document.querySelectorAll('.walkway-input-node').forEach(input => {
-            input.disabled = shouldLock;
-        });
-
-        if (shouldLock) {
-            writeSecureDataRecord('five_star_form_validation_locked', 'TRUE');
-        } else {
-            deleteSecureDataRecord('five_star_form_validation_locked');
-        }
+        localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
     function loadSavedDraftProgressData() {
-        readSecureDataRecord('five_star_active_draft_session', function(rawDraft) {
-            forceVisualUnlockingSequence();
-            if (!rawDraft) return;
-            let draft = JSON.parse(rawDraft);
-            
-            document.getElementById('initials').value = draft.initials || "";
-            document.getElementById('shift').value = draft.shift || "";
-            document.getElementById('freehandNotes').value = draft.freehandNotes || "";
-            runtimeCheckboxStateMemory = draft.checkboxes || {};
-
-            const formContainerTarget = document.getElementById('dynamicWizardContainer');
-            const observerInstance = new MutationObserver(function(mutations, observerRef) {
-                var inputElementsMesh = document.querySelectorAll('input[data-sec]');
-                if (inputElementsMesh.length > 0) {
-                    observerRef.disconnect();
-                    inputElementsMesh.forEach(input => {
-                        let name = input.getAttribute('data-name');
-                        if (draft.temperatures && draft.temperatures[name] !== undefined) {
-                            input.value = draft.temperatures[name];
-                            evaluateFieldStyle(input, input.getAttribute('data-sec'));
-                        }
-                    });
-                    readSecureDataRecord('five_star_form_validation_locked', function(locked) {
-                        if(locked === 'TRUE') runStageOneValidation();
-                    });
-                }
-            });
-
-            observerInstance.observe(formContainerTarget, { childList: true, subtree: true });
-            
-            var instantScan = document.querySelectorAll('input[data-sec]');
-            if (instantScan.length > 0) {
-                observerInstance.disconnect();
-                instantScan.forEach(input => {
-                    let name = input.getAttribute('data-name');
-                    if (draft.temperatures && draft.temperatures[name] !== undefined) {
-                        input.value = draft.temperatures[name];
-                        evaluateFieldStyle(input, input.getAttribute('data-sec'));
-                    }
-                });
-                readSecureDataRecord('five_star_form_validation_locked', function(locked) {
-                    if(locked === 'TRUE') runStageOneValidation();
-                });
+        let rawDraft = localStorage.getItem('five_star_active_draft_session');
+        if (!rawDraft) return;
+        let draft = JSON.parse(rawDraft);
+        isInspectionActive = true;
+        clearInterval(backgroundRefreshPollerId);
+        
+        document.getElementById('initials').value = draft.initials || "";
+        document.getElementById('shift').value = draft.shift || "";
+        document.getElementById('freehandNotes').value = draft.freehandNotes || "";
+        runtimeCheckboxStateMemory = draft.checkboxes || {};
+        
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            let name = input.getAttribute('data-name');
+            if (draft.temperatures[name] !== undefined) {
+                input.value = draft.temperatures[name];
+                evaluateFieldStyle(input, input.getAttribute('data-sec'));
             }
         });
-    }
-
-    function registerMobileWakeListeners() {
-        const handleWakeRecovery = () => {
-            readSecureDataRecord('five_star_kiosk_layout_interlock_active', function(val) {
-                if (val === 'TRUE' && !isInspectionActive) {
-                    console.log("iPad wake recovery event triggered: Restoring records package.");
-                    bootUpOfflineFirstWorkspace();
-                }
-            });
-        };
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') { handleWakeRecovery(); }
-        });
-
-        window.addEventListener('pageshow', (event) => {
-            handleWakeRecovery();
-        });
-    }
-
-    async function requestScreenWakeLock() {
-        if ('wakeLock' in navigator) {
-            try {
-                wakeLockInstance = await navigator.wakeLock.request('screen');
-            } catch (err) {
-                console.warn(`Wake Lock initialization bypass handled.`);
-            }
-        }
-    }
-
-    function releaseScreenWakeLock() {
-        if (wakeLockInstance !== null) {
-            wakeLockInstance.release().then(() => {
-                wakeLockInstance = null;
-            });
-        }
+        
+        document.getElementById('masterForm').classList.remove('form-locked-state');
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        sessionBtn.innerText = "🛑 Cancel & Reset Route";
+        sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
     }
 
     function toggleKioskFormInterlock() {
+        const targetForm = document.getElementById('masterForm');
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        
         if (!isInspectionActive) {
             isInspectionActive = true;
+            clearInterval(backgroundRefreshPollerId); 
             runtimeCheckboxStateMemory = {};
             
-            readSecureDataRecord('five_star_hardware_layout_schema', function(offlineSchemaRaw) {
-                if (offlineSchemaRaw) {
-                    activeStructuralMap = JSON.parse(offlineSchemaRaw);
-                } else {
-                    activeStructuralMap = embeddedHardcodedBackupSchema; // Safeguard interface construction
-                }
-                
-                readSecureDataRecord('five_star_hardware_order_map', function(offlineOrderRaw) {
-                    if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
+            sessionBtn.innerText = "⏳ Syncing Store Database Layout...";
+            sessionBtn.className = "btn btn-secondary fw-bold px-4 shadow-sm";
+            
+            fetch(cloudSpreadsheetURL)
+            .then(res => res.json())
+            .then(res => {
+                if (res.status === "success") {
+                    activeStructuralMap = res.structural_schema;
                     
-                    renderDynamicFormElements(activeStructuralMap);
-                    forceVisualUnlockingSequence();
-                    requestScreenWakeLock(); 
-                    saveDraftProgressData();
+                    if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
+                    else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
+                    else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
+                    else rawCloudSequenceMap = {};
+                    
+                    renderDynamicFormElements(res.structural_schema);
+                    if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                    if (res.current_status) activeDashboardMemoryCache = res.current_status;
+                    
+                    targetForm.classList.remove('form-locked-state');
+                    sessionBtn.innerText = "🛑 Cancel & Reset Route";
+                    sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+                    saveDraftProgressData(); 
+                    
                     setTimeout(focusInitialWalkwayElement, 500);
-                });
+                }
             });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                deleteSecureDataRecord('five_star_active_draft_session'); 
-                deleteSecureDataRecord('five_star_kiosk_layout_interlock_active');
-                deleteSecureDataRecord('five_star_form_validation_locked');
+                localStorage.removeItem('five_star_active_draft_session'); 
                 forceSessionShutdownReset();
             }
         }
@@ -549,139 +404,64 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
-        deleteSecureDataRecord('five_star_kiosk_layout_interlock_active');
-        deleteSecureDataRecord('five_star_form_validation_locked');
-        
-        applyGlobalInputLockdownState(false); 
-        
+        localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
-        document.getElementById('dynamicWizardContainer').innerHTML = '';
         
         const sessionBtn = document.getElementById('kioskSessionBtn');
         sessionBtn.innerText = "🟢 Start New Inspection Route";
         sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
         
-        document.getElementById('finalSubmitBtn').disabled = true;
-        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
-        document.getElementById('validateActionsBtn').style.display = "none";
+        lockSubmissionOnChanges();
+        pullSystemStructure();
         
-        releaseScreenWakeLock(); 
-        bootUpOfflineFirstWorkspace();
+        absoluteLastSyncTimestampMemory = Date.now();
+        startAutomaticDashboardPolling(); 
     }
 
-    function executeManualCloudSyncHandshake() {
-        const syncBtn = document.getElementById('manualCloudSyncBtn');
-        syncBtn.innerText = "⏳ Connecting to Cloud Stream...";
-        syncBtn.disabled = true;
-
-        fetch('https://api.open-meteo.com/v1/forecast?latitude=41.2959&longitude=-86.6222&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
-        .then(res => res.json())
-        .then(data => {
-            if (data && data.current) {
-                let rawTemp = data.current.temperature_2m !== undefined ? data.current.temperature_2m : 72;
-                clientObservedTemp = Math.round(rawTemp) + "°F";
-                const code = data.current.weather_code !== undefined ? data.current.weather_code : 0;
-                if (code === 0) clientObservedCond = "Clear Sky";
-                else if (code <= 3) clientObservedCond = "Partly Cloudy";
-                else if (code <= 65) clientObservedCond = "Rain Showers";
-                else clientObservedCond = "Overcast";
+    function startAutomaticDashboardPolling() {
+        clearInterval(backgroundRefreshPollerId);
+        
+        backgroundRefreshPollerId = setInterval(() => {
+            const rightNow = Date.now();
+            const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
+            
+            if (!isInspectionActive && currentViewerIndex === -1) {
+                if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
+                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
+                    absoluteLastSyncTimestampMemory = rightNow;
+                    pullSystemStructure(); 
+                }
             }
-        }).catch(() => {
-            clientObservedTemp = "72°F";
-            clientObservedCond = "Clear Sky";
-        });
+        }, 30000); 
+    }
 
+    function pullSystemStructure() {
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 activeStructuralMap = res.structural_schema;
                 
-                writeSecureDataRecord('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
-                writeSecureDataRecord('five_star_historical_cache', JSON.stringify(res.historical_ledger_packages || []));
-                writeSecureDataRecord('five_star_status_cache', JSON.stringify(res.current_status || {}));
-                writeSecureDataRecord('five_star_meta_log', res.meta_last_log || "");
+                if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
+                else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
+                else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                 
-                if (res.display_order_map || res.sequence_map || res.walkway_sequence_map) {
-                    let ord = res.display_order_map || res.sequence_map || res.walkway_sequence_map;
-                    writeSecureDataRecord('five_star_hardware_order_map', JSON.stringify(ord));
-                    rawCloudSequenceMap = ord || {};
-                }
-
+                if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                if (!isInspectionActive) {
+                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
                     renderDynamicFormElements(res.structural_schema);
-                } else {
-                    rebuildDynamicCloudSequenceArray();
+                    loadSavedDraftProgressData();
                 }
                 
-                processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
-                syncBtn.innerText = "✅ Sync Complete";
-                setTimeout(() => {
-                    syncBtn.innerText = "🔄 Sync Cloud Database Structure";
-                    syncBtn.disabled = false;
-                }, 2000);
+                if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
-        }).catch(err => {
-            alert("⚠️ Sync Timeout. Spreadsheet web application unreachable over Wi-Fi framework lines.");
-            syncBtn.innerText = "🔄 Sync Cloud Database Structure";
-            syncBtn.disabled = false;
-        });
-    }
-
-    function bootUpOfflineFirstWorkspace() {
-        readSecureDataRecord('five_star_hardware_layout_schema', function(offlineSchemaRaw) {
-            readSecureDataRecord('five_star_historical_cache', function(offlineHistRaw) {
-                readSecureDataRecord('five_star_status_cache', function(offlineStatusRaw) {
-                    readSecureDataRecord('five_star_meta_log', function(offlineMetaRaw) {
-                        readSecureDataRecord('five_star_hardware_order_map', function(offlineOrderRaw) {
-                            readSecureDataRecord('five_star_kiosk_layout_interlock_active', function(isInterlockActiveInMemory) {
-                                
-                                offlineMetaRaw = offlineMetaRaw || "Cached Local Mirror";
-                                
-                                try {
-                                    rawCloudSequenceMap = offlineOrderRaw ? JSON.parse(offlineOrderRaw) : {};
-                                } catch(e) {
-                                    rawCloudSequenceMap = {};
-                                }
-
-                                if (offlineSchemaRaw) {
-                                    activeStructuralMap = JSON.parse(offlineSchemaRaw);
-                                } else {
-                                    activeStructuralMap = embeddedHardcodedBackupSchema; // Enforce UI generation even if iOS purged memory tags
-                                }
-
-                                try {
-                                    if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
-                                    if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
-
-                                    renderDynamicFormElements(activeStructuralMap);
-
-                                    if (isInterlockActiveInMemory === 'TRUE') {
-                                        loadSavedDraftProgressData();
-                                    } else {
-                                        if (!isInspectionActive) {
-                                            document.getElementById('masterForm').reset();
-                                            document.getElementById('masterForm').classList.add('form-locked-state');
-                                        }
-                                    }
-                                    processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
-                                } catch(err) {
-                                    console.error("Execution profile recovery skipped.", err);
-                                }
-                            });
-                        });
-                    });
-                });
-            });
         });
     }
 
     function renderDynamicFormElements(schema) {
-        if (!schema) return;
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
         
@@ -713,35 +493,38 @@
 
     function rebuildDynamicCloudSequenceArray() {
         calculatedSequenceArray = Array.from(document.querySelectorAll('.walkway-input-node'));
-        let sortMap = rawCloudSequenceMap || {};
-        let useCloudSort = Object.keys(sortMap).length > 0;
+        let useCloudSort = Object.keys(rawCloudSequenceMap).length > 0;
         
         if (useCloudSort) {
             calculatedSequenceArray.sort((a, b) => {
                 let nameA = a.getAttribute('data-name');
                 let nameB = b.getAttribute('data-name');
-                let rawOrderA = sortMap[nameA] !== undefined ? sortMap[nameA] : 9999;
-                let rawOrderB = sortMap[nameB] !== undefined ? sortMap[nameB] : 9999;
+                
+                let rawOrderA = 9999;
+                let rawOrderB = 9999;
+                
+                if (rawCloudSequenceMap[nameA] !== undefined) rawOrderA = rawCloudSequenceMap[nameA];
+                if (rawCloudSequenceMap[nameB] !== undefined) rawOrderB = rawCloudSequenceMap[nameB];
                 
                 let orderA = (rawOrderA === "" || rawOrderA === null || isNaN(parseFloat(rawOrderA))) ? 9999 : parseFloat(rawOrderA);
                 let orderB = (rawOrderB === "" || rawOrderB === null || isNaN(parseFloat(rawOrderB))) ? 9999 : parseFloat(rawOrderB);
+                
                 return orderA - orderB;
             });
         }
 
         calculatedSequenceArray.forEach((input, index) => {
             input.setAttribute('data-walk-index', index);
+            
             input.removeEventListener('keydown', handleWalkwayKeyboardInterration);
             input.removeEventListener('focus', handleWalkwayFocusHighlighter);
             input.removeEventListener('blur', handleWalkwayBlurClearer);
             input.removeEventListener('input', handleNativeInputOverride);
-            input.removeEventListener('blur', saveDraftProgressData); 
             
             input.addEventListener('keydown', handleWalkwayKeyboardInterration);
             input.addEventListener('focus', handleWalkwayFocusHighlighter);
             input.addEventListener('blur', handleWalkwayBlurClearer);
             input.addEventListener('input', handleNativeInputOverride);
-            input.addEventListener('blur', saveDraftProgressData); 
         });
     }
 
@@ -819,7 +602,7 @@
         
         if (currentViewerIndex >= localCacheHistory.length) { 
             currentViewerIndex = localCacheHistory.length - 1; 
-            alert("⏮️ Reached oldest historical data block."); 
+            alert("⏮️ Reached oldest historical data data block."); 
             return; 
         }
 
@@ -834,13 +617,12 @@
     function jumpToLiveStream() {
         currentViewerIndex = -1;
         const modeInd = document.getElementById('dashboardModeIndicator');
-        document.getElementById('dashboardModeIndicator').innerText = "● Local Mode";
-        document.getElementById('dashboardModeIndicator').className = "badge bg-success live-indicator";
-        bootUpOfflineFirstWorkspace();
+        modeInd.innerText = "● Real-Time Cloud";
+        modeInd.className = "badge bg-success live-indicator";
+        pullSystemStructure();
     }
 
     function processDashboardViewUpdate(statusMap, isLiveCloudData, metaString) {
-        if (!statusMap) return;
         let prefixText = isLiveCloudData ? "Last Logged: " : "Viewing Past Report: ";
         document.getElementById('latestLogMeta').innerText = `${prefixText}${metaString}`;
         
@@ -862,7 +644,6 @@
     }
 
     function renderDashboardLights(schema, statusRecords) {
-        if (!schema || !statusRecords) return;
         const dashboard = document.getElementById('fullWidthStatusDashboard');
         dashboard.innerHTML = '';
         for (let secId in limitsSchema) {
@@ -948,13 +729,14 @@
                 }
             }
             
-            if (labelsTimeline.length > 30) {
-                labelsTimeline = labelsTimeline.slice(-30);
-                dataPointsPlot = dataPointsPlot.slice(-30);
+            // 🎯 FIXED TRACKING SCALE GATE: Cap points at a maximum history length of 50 logs
+            if (labelsTimeline.length > 50) {
+                labelsTimeline = labelsTimeline.slice(-50);
+                dataPointsPlot = dataPointsPlot.slice(-50);
             }
             if (dataPointsPlot.length === 0) return;
             
-            document.getElementById('trendModalTitle').innerText = `📈 30-Check Operational Trend Matrix: ${appleGlobalPendingAsset}`;
+            document.getElementById('trendModalTitle').innerText = `📈 50-Check Operational Trend Matrix: ${appleGlobalPendingAsset}`;
             if (globalChartInstanceReference) globalChartInstanceReference.destroy();
             
             const ctx = document.getElementById('canvasTrendTrackerNode').getContext('2d');
@@ -970,7 +752,7 @@
                             backgroundColor: 'rgba(13, 110, 253, 0.08)',
                             borderWidth: 2,
                             tension: 0.1,
-                            pointRadius: 3,
+                            pointRadius: 2,
                             pointBackgroundColor: '#0d6efd',
                             fill: true
                         },
@@ -1004,7 +786,7 @@
                             suggestedMin: Math.min(...dataPointsPlot, appleGlobalPendingLimits.min) - 3,
                             suggestedMax: Math.max(...dataPointsPlot, appleGlobalPendingLimits.max) + 3
                         },
-                        x: { ticks: { font: { size: 9, weight: 'semibold' }, maxRotation: 45, minRotation: 45 } }
+                        x: { ticks: { font: { size: 8, weight: 'semibold' }, maxRotation: 45, minRotation: 45 } }
                     }
                 }
             });
@@ -1096,11 +878,9 @@
             return; 
         }
         
-        applyGlobalInputLockdownState(true);
-
         if (errorsLogged > 0) {
             document.getElementById('validateActionsBtn').style.display = "block";
-            alert(`🔒 Sheet Saved & Locked: Detected ${errorsLogged} temperature exceptions. Complete required corrective action checkboxes below to submit.`);
+            alert(`⚠️ Action Required: Detected ${errorsLogged} temperature issues. Complete corrective protocols below.`);
             if (firstFailedSectionId) {
                 setTimeout(() => {
                     let targetSectionBlock = document.getElementById(`block-${firstFailedSectionId}`);
@@ -1112,7 +892,7 @@
 
         document.getElementById('finalSubmitBtn').disabled = false;
         document.getElementById('finalSubmitBtn').classList.replace('btn-secondary', 'btn-success');
-        alert("✅ Worksheet successfully locked and verified! Transmission switch opened.");
+        alert("✅ Worksheet successfully verified! Data submission switch opened.");
     }
 
     function runStageTwoValidation() {
@@ -1189,9 +969,6 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
-            deleteSecureDataRecord('five_star_active_draft_session'); 
-            deleteSecureDataRecord('five_star_kiosk_layout_interlock_active');
-            deleteSecureDataRecord('five_star_form_validation_locked');
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
@@ -1224,17 +1001,14 @@
             document.getElementById('mgmtCoolerName').value = '';
             document.getElementById('mgmtPlacementOrder').value = '';
             document.getElementById('mgmtAuthCode').value = '';
-            executeManualCloudSyncHandshake();
+            setTimeout(pullSystemStructure, 1000);
         });
     }
 
     window.onload = function() {
-        updateLiveClockAndWeather();
-        registerMobileWakeListeners(); 
-        initializePersistentStoragePipeline(function() {
-            // Fires only when the hardware database engine is verified online
-            bootUpOfflineFirstWorkspace();
-        });
+        absoluteLastSyncTimestampMemory = Date.now();
+        pullSystemStructure();
+        startAutomaticDashboardPolling(); 
     };
 </script>
 </body>
