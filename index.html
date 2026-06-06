@@ -67,8 +67,8 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.2</span></h2>
-            <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.3</span></h2>
+            <small>Dynamic Self-Assembling Interface Layout Module with iPad Safe Manual Refresh</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
@@ -80,6 +80,7 @@
                 <div class="btn-group shadow-sm" role="group">
                     <button type="button" class="btn btn-outline-secondary btn-sm history-nav-btn" id="navPrevBtn" onclick="navigateHistory(-1)">◀ Back</button>
                     <button type="button" class="btn btn-outline-primary btn-sm history-nav-btn" id="navLiveBtn" onclick="jumpToLiveStream()">Live</button>
+                    <button type="button" class="btn btn-outline-success btn-sm history-nav-btn" id="manualRefreshBtn" onclick="manualRefreshCloudData()">🔄 Refresh</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm history-nav-btn" id="navNextBtn" onclick="navigateHistory(1)">Forward ▶</button>
                 </div>
                 <span id="dashboardModeIndicator" class="badge bg-success live-indicator">● Real-Time Cloud</span>
@@ -488,27 +489,38 @@
         sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
         
         lockSubmissionOnChanges();
+
+        // This refresh is allowed because it happens only after an in-app user action.
         pullSystemStructure();
-        
         absoluteLastSyncTimestampMemory = Date.now();
-        startAutomaticDashboardPolling(); 
     }
 
     function startAutomaticDashboardPolling() {
+        // Disabled for iPad lock safety.
+        // The app should not auto-refresh after screen lock, wake, or timeout.
+        // Cloud data is refreshed only by explicit in-app actions such as Start, Refresh, Live, Submit, Cancel, or Manager changes.
         clearInterval(backgroundRefreshPollerId);
-        
-        backgroundRefreshPollerId = setInterval(() => {
-            const rightNow = Date.now();
-            const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
-            
-            if (!isInspectionActive && currentViewerIndex === -1) {
-                if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
-                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
-                    absoluteLastSyncTimestampMemory = rightNow;
-                    pullSystemStructure(); 
-                }
-            }
-        }, 30000); 
+        backgroundRefreshPollerId = null;
+        return;
+    }
+
+    function manualRefreshCloudData() {
+        if (isInspectionActive) {
+            saveDraftProgressData(true);
+            alert("An inspection is active. Your draft was saved, but cloud refresh is blocked so the form is not overwritten. Finish, submit, or cancel the inspection before refreshing dashboard data.");
+            return;
+        }
+
+        currentViewerIndex = -1;
+        absoluteLastSyncTimestampMemory = Date.now();
+
+        const modeInd = document.getElementById('dashboardModeIndicator');
+        if (modeInd) {
+            modeInd.innerText = "● Manual Refresh";
+            modeInd.className = "badge bg-primary live-indicator";
+        }
+
+        pullSystemStructure();
     }
 
     function pullSystemStructure() {
@@ -837,6 +849,23 @@
         });
     }
 
+    function initializeAppWithoutAutomaticWakeRefresh() {
+        installIPadDraftSafetyAutosave();
+        startAutomaticDashboardPolling();
+
+        const savedDraft = safelyReadDraftFromStorage();
+
+        if (savedDraft) {
+            // iPad/Safari may reload the page after lock. Load the layout once so fields exist,
+            // then restore the saved draft. No repeating background refresh is started.
+            isInspectionActive = false;
+            pullSystemStructure();
+        } else {
+            // Initial dashboard load only. Future cloud refreshes require a user action.
+            pullSystemStructure();
+        }
+    }
+
     /*
        ========================================================================
        🛡️ REINFORCED CHART INJECTION SEQUENCE (MAX 50 CHRONOLOGICAL RECORDS)
@@ -845,9 +874,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         updateLiveClockAndWeather();
         setInterval(updateLiveClockAndWeather, 60000);
-        pullSystemStructure();
-        startAutomaticDashboardPolling();
-        installIPadDraftSafetyAutosave(); 
+        initializeAppWithoutAutomaticWakeRefresh(); 
         
         var targetModalNode = document.getElementById('trendChartModal');
         targetModalNode.addEventListener('shown.bs.modal', function () {
