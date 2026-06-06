@@ -65,12 +65,13 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.4.1 Bulk</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.4.2 Master Build</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
+    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -446,7 +447,6 @@
         let offlineStatusRaw = localStorage.getItem('five_star_current_status_backup');
         let offlineMetaRaw = localStorage.getItem('five_star_meta_log_backup') || "Local Profile Active";
 
-        // 🛡️ STEP 1: Core Offline Build. Restores historical matrix memory anchors safely on wake
         if (offlineSchemaRaw) {
             activeStructuralMap = JSON.parse(offlineSchemaRaw);
             rawCloudSequenceMap = offlineOrdersRaw ? JSON.parse(offlineOrdersRaw) : {};
@@ -471,7 +471,6 @@
             if (currentViewerIndex === -1) processDashboardViewUpdate(activeDashboardMemoryCache, false, offlineMetaRaw);
         }
 
-        // STEP 2: Background Ledger Sync. Feeds analytical chart lines without mutating active text inputs
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
@@ -490,7 +489,6 @@
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                 localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                 
-                // Hard network barrier blocks network updates from erasing dynamic elements
                 if (!isInspectionActive && !isRouteOpenOnHardware) { 
                     renderDynamicFormElements(res.structural_schema); 
                 }
@@ -743,6 +741,11 @@
         modalInstance.show();
     }
 
+    /*
+       ========================================================================
+       🔒 THE 10-COLUMN SYNCHRONIZATION ALIGNMENT FIX
+       ========================================================================
+    */
     function transmitLogsToCloud() {
         saveActiveCheckboxesToMemory();
         const submitBtn = document.getElementById('finalSubmitBtn');
@@ -753,10 +756,26 @@
         let sharedNotes = document.getElementById('freehandNotes').value.trim() || "None Logged";
         
         document.querySelectorAll('input[data-sec]').forEach(input => {
+            let sectionId = input.getAttribute('data-sec');
+            let assetName = input.getAttribute('data-name');
+            let matchedAction = "None Required";
+            
+            if (runtimeCheckboxStateMemory[assetName]) {
+                let activeMeasures = [];
+                for (let actionText in runtimeCheckboxStateMemory[assetName]) {
+                    if (runtimeCheckboxStateMemory[assetName][actionText] === true) {
+                        activeMeasures.push(actionText);
+                    }
+                }
+                if (activeMeasures.length > 0) matchedAction = activeMeasures.join(" | ");
+            }
+            
+            // 🎯 FIXED DATA MAP: Perfectly maps variable names to your Google Apps Script array parsing loop
             package.push({
-                cooler_name: input.getAttribute('data-name'),
-                temperature: parseFloat(input.value),
-                action_taken: "Logged Status Passed"
+                department: limitsSchema[sectionId].title, // Column D
+                new_asset_name: assetName,                 // Column E
+                temperature: parseFloat(input.value),      // Column F
+                action_taken: matchedAction                // Column G
             });
         });
 
