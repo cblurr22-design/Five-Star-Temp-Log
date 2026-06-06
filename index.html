@@ -45,9 +45,11 @@
             transition: all 0.2s ease-in-out;
         }
 
+        /* 💻 FULL-WIDTH RESPONSIVE VIEWPORT DIALOG TUNING */
         .full-screen-fluid-dialog { max-width: 96% !important; margin: 2% auto !important; }
-        .fluid-canvas-viewport { position: relative; height: 50vh !important; width: 100% !important; }
+        .fluid-canvas-viewport { position: relative; height: 55vh !important; width: 100% !important; }
 
+        /* 📱 HIGH-VISIBILITY SCALING RULES FOR MOBILE TABLETS/IPADS */
         @media (max-width: 1024px) {
             .section-block h5 { font-size: 1.45rem !important; margin-bottom: 1rem !important; }
             .alert-item-container label { font-size: 14px !important; font-weight: 700 !important; color: #111111 !important; }
@@ -65,13 +67,12 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.4.2 Master Build</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
-    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -128,9 +129,7 @@
             <div class="card p-4 shadow-sm border-primary" style="border-width: 2px;">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
                     <h4 class="text-secondary mb-0">📝 Digital Floor Log Sheet</h4>
-                    <div class="d-flex gap-2">
-                        <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-4 shadow-sm">🟢 Start New Inspection Route</button>
-                    </div>
+                    <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-4 shadow-sm">🟢 Start New Inspection Route</button>
                 </div>
                 
                 <form id="masterForm" class="form-locked-state" novalidate>
@@ -241,6 +240,7 @@
                 }
             }
         }).catch(err => {
+            console.log("Weather service unreachable. Rolling over to safe local fallbacks.");
             clientObservedTemp = "72°F";
             clientObservedCond = "Clear Sky";
         });
@@ -289,13 +289,20 @@
                         const priorStatusClass = determineStatusClass(priorTemperatureValue, limits);
                         
                         if (priorStatusClass === "status-green") {
-                            if (input.value.trim() === "") {
-                                input.value = priorTemperatureValue;
-                                evaluateFieldStyle(input, sectionId);
-                            }
+                            input.value = priorTemperatureValue;
+                            evaluateFieldStyle(input, sectionId);
+                        } else {
+                            input.value = "";
+                            evaluateFieldStyle(input, sectionId);
                         }
                     }
+                } else {
+                    input.value = "";
+                    evaluateFieldStyle(input, sectionId);
                 }
+            } else {
+                input.value = "";
+                evaluateFieldStyle(input, sectionId);
             }
         });
         
@@ -321,19 +328,44 @@
             shift: document.getElementById('shift').value,
             freehandNotes: document.getElementById('freehandNotes').value,
             temperatures: {},
-            checkboxes: runtimeCheckboxStateMemory
+            checkboxes: runtimeCheckboxStateMemory,
+            saved_at: new Date().toISOString()
         };
         document.querySelectorAll('input[data-sec]').forEach(input => {
             draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
-        localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); 
+    }
+
+    // Extra iPad/Safari safety: save immediately before the browser sleeps, locks, hides, or unloads.
+    function installIPadDraftSafetyAutosave() {
+        document.addEventListener("input", saveDraftProgressData, true);
+        document.addEventListener("change", saveDraftProgressData, true);
+        document.addEventListener("blur", saveDraftProgressData, true);
+
+        document.addEventListener("visibilitychange", function () {
+            if (document.hidden) saveDraftProgressData();
+        });
+
+        window.addEventListener("pagehide", saveDraftProgressData);
+        window.addEventListener("beforeunload", saveDraftProgressData);
     }
 
     function loadSavedDraftProgressData() {
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
         if (!rawDraft) return;
-        let draft = JSON.parse(rawDraft);
+
+        let draft;
+        try {
+            draft = JSON.parse(rawDraft);
+        } catch (err) {
+            console.warn("Saved draft was corrupted and has been cleared.", err);
+            localStorage.removeItem('five_star_active_draft_session');
+            return;
+        }
+
+        isInspectionActive = true;
+        clearInterval(backgroundRefreshPollerId);
         
         document.getElementById('initials').value = draft.initials || "";
         document.getElementById('shift').value = draft.shift || "";
@@ -347,6 +379,11 @@
                 evaluateFieldStyle(input, input.getAttribute('data-sec'));
             }
         });
+        
+        document.getElementById('masterForm').classList.remove('form-locked-state');
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        sessionBtn.innerText = "🛑 Cancel & Reset Route";
+        sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
     }
 
     function toggleKioskFormInterlock() {
@@ -355,7 +392,6 @@
         
         if (!isInspectionActive) {
             isInspectionActive = true;
-            localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); 
             clearInterval(backgroundRefreshPollerId); 
             runtimeCheckboxStateMemory = {};
             
@@ -367,23 +403,15 @@
             .then(res => {
                 if (res.status === "success") {
                     activeStructuralMap = res.structural_schema;
-                    localStorage.setItem('five_star_structural_schema_backup', JSON.stringify(res.structural_schema));
                     
                     if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                     else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                     else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                     else rawCloudSequenceMap = {};
-                    localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                     
                     renderDynamicFormElements(res.structural_schema);
-                    if (res.historical_ledger_packages) {
-                        localCacheHistory = res.historical_ledger_packages;
-                        localStorage.setItem('five_star_historical_ledger_backup', JSON.stringify(res.historical_ledger_packages));
-                    }
-                    if (res.current_status) {
-                        activeDashboardMemoryCache = res.current_status;
-                        localStorage.setItem('five_star_current_status_backup', JSON.stringify(res.current_status));
-                    }
+                    if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                    if (res.current_status) activeDashboardMemoryCache = res.current_status;
                     
                     targetForm.classList.remove('form-locked-state');
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
@@ -396,7 +424,6 @@
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
                 localStorage.removeItem('five_star_active_draft_session'); 
-                localStorage.removeItem('five_star_operator_route_running_flag');
                 forceSessionShutdownReset();
             }
         }
@@ -404,7 +431,6 @@
 
     function forceSessionShutdownReset() {
         isInspectionActive = false;
-        localStorage.removeItem('five_star_operator_route_running_flag');
         runtimeCheckboxStateMemory = {};
         localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
@@ -425,13 +451,12 @@
         clearInterval(backgroundRefreshPollerId);
         
         backgroundRefreshPollerId = setInterval(() => {
-            if (localStorage.getItem('five_star_operator_route_running_flag') === 'TRUE') return;
-
             const rightNow = Date.now();
             const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
             
             if (!isInspectionActive && currentViewerIndex === -1) {
                 if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
+                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
                     absoluteLastSyncTimestampMemory = rightNow;
                     pullSystemStructure(); 
                 }
@@ -440,67 +465,31 @@
     }
 
     function pullSystemStructure() {
-        let isRouteOpenOnHardware = localStorage.getItem('five_star_operator_route_running_flag') === 'TRUE';
-        let offlineSchemaRaw = localStorage.getItem('five_star_structural_schema_backup');
-        let offlineOrdersRaw = localStorage.getItem('five_star_hardware_order_backup');
-        let offlineHistoryRaw = localStorage.getItem('five_star_historical_ledger_backup');
-        let offlineStatusRaw = localStorage.getItem('five_star_current_status_backup');
-        let offlineMetaRaw = localStorage.getItem('five_star_meta_log_backup') || "Local Profile Active";
-
-        if (offlineSchemaRaw) {
-            activeStructuralMap = JSON.parse(offlineSchemaRaw);
-            rawCloudSequenceMap = offlineOrdersRaw ? JSON.parse(offlineOrdersRaw) : {};
-            if (offlineHistoryRaw) localCacheHistory = JSON.parse(offlineHistoryRaw);
-            if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
-            
-            if (isRouteOpenOnHardware) {
-                isInspectionActive = true;
-                renderDynamicFormElements(activeStructuralMap, function() {
-                    loadSavedDraftProgressData();
-                    const targetForm = document.getElementById('masterForm');
-                    const sessionBtn = document.getElementById('kioskSessionBtn');
-                    if (targetForm) targetForm.classList.remove('form-locked-state');
-                    if (sessionBtn) {
-                        sessionBtn.innerText = "🛑 Cancel & Reset Route";
-                        sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-                    }
-                });
-            } else {
-                if (!isInspectionActive) { renderDynamicFormElements(activeStructuralMap); }
-            }
-            if (currentViewerIndex === -1) processDashboardViewUpdate(activeDashboardMemoryCache, false, offlineMetaRaw);
-        }
-
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
-                localStorage.setItem('five_star_structural_schema_backup', JSON.stringify(res.structural_schema));
-                localStorage.setItem('five_star_historical_ledger_backup', JSON.stringify(res.historical_ledger_packages || []));
-                localStorage.setItem('five_star_current_status_backup', JSON.stringify(res.current_status || {}));
-                localStorage.setItem('five_star_meta_log_backup', res.meta_last_log || "");
-                
                 activeStructuralMap = res.structural_schema;
-                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
                 if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                 else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
-                localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                 
-                if (!isInspectionActive && !isRouteOpenOnHardware) { 
-                    renderDynamicFormElements(res.structural_schema); 
+                if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
+                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                if (res.current_status) activeDashboardMemoryCache = res.current_status;
+                
+                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
+                    renderDynamicFormElements(res.structural_schema);
+                    loadSavedDraftProgressData();
                 }
                 
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
-        }).catch(err => {
-            console.log("Operating securely from local hardware disk image profiles.");
         });
     }
 
-    function renderDynamicFormElements(schema, layoutCompletionCallback) {
+    function renderDynamicFormElements(schema) {
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
         
@@ -528,10 +517,6 @@
         }
 
         rebuildDynamicCloudSequenceArray();
-
-        if (typeof layoutCompletionCallback === "function") {
-            layoutCompletionCallback();
-        }
     }
 
     function rebuildDynamicCloudSequenceArray() {
@@ -666,7 +651,6 @@
     }
 
     function processDashboardViewUpdate(statusMap, isLiveCloudData, metaString) {
-        if (!statusMap) return;
         let prefixText = isLiveCloudData ? "Last Logged: " : "Viewing Past Report: ";
         document.getElementById('latestLogMeta').innerText = `${prefixText}${metaString}`;
         
@@ -688,7 +672,6 @@
     }
 
     function renderDashboardLights(schema, statusRecords) {
-        if (!schema || !statusRecords) return;
         const dashboard = document.getElementById('fullWidthStatusDashboard');
         dashboard.innerHTML = '';
         for (let secId in limitsSchema) {
@@ -741,11 +724,6 @@
         modalInstance.show();
     }
 
-    /*
-       ========================================================================
-       🔒 THE 10-COLUMN SYNCHRONIZATION ALIGNMENT FIX
-       ========================================================================
-    */
     function transmitLogsToCloud() {
         saveActiveCheckboxesToMemory();
         const submitBtn = document.getElementById('finalSubmitBtn');
@@ -756,26 +734,10 @@
         let sharedNotes = document.getElementById('freehandNotes').value.trim() || "None Logged";
         
         document.querySelectorAll('input[data-sec]').forEach(input => {
-            let sectionId = input.getAttribute('data-sec');
-            let assetName = input.getAttribute('data-name');
-            let matchedAction = "None Required";
-            
-            if (runtimeCheckboxStateMemory[assetName]) {
-                let activeMeasures = [];
-                for (let actionText in runtimeCheckboxStateMemory[assetName]) {
-                    if (runtimeCheckboxStateMemory[assetName][actionText] === true) {
-                        activeMeasures.push(actionText);
-                    }
-                }
-                if (activeMeasures.length > 0) matchedAction = activeMeasures.join(" | ");
-            }
-            
-            // 🎯 FIXED DATA MAP: Perfectly maps variable names to your Google Apps Script array parsing loop
             package.push({
-                department: limitsSchema[sectionId].title, // Column D
-                new_asset_name: assetName,                 // Column E
-                temperature: parseFloat(input.value),      // Column F
-                action_taken: matchedAction                // Column G
+                cooler_name: input.getAttribute('data-name'),
+                temperature: parseFloat(input.value),
+                action_taken: "Logged Status Passed"
             });
         });
 
@@ -792,8 +754,6 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
-            localStorage.removeItem('five_star_active_draft_session');
-            localStorage.removeItem('five_star_operator_route_running_flag');
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
@@ -830,10 +790,17 @@
         });
     }
 
-    window.onload = function() {
-        absoluteLastSyncTimestampMemory = Date.now();
+    /*
+       ========================================================================
+       🛡️ REINFORCED CHART INJECTION SEQUENCE (MAX 50 CHRONOLOGICAL RECORDS)
+       ========================================================================
+    */
+    document.addEventListener('DOMContentLoaded', function() {
+        updateLiveClockAndWeather();
+        setInterval(updateLiveClockAndWeather, 60000);
         pullSystemStructure();
-        startAutomaticDashboardPolling(); 
+        startAutomaticDashboardPolling();
+        installIPadDraftSafetyAutosave(); 
         
         var targetModalNode = document.getElementById('trendChartModal');
         targetModalNode.addEventListener('shown.bs.modal', function () {
@@ -864,6 +831,7 @@
                 }
             }
             
+            // Truncate logic restricted strictly to the final 50 references
             if (labelsTimeline.length > 50) {
                 labelsTimeline = labelsTimeline.slice(-50);
                 dataPointsPlot = dataPointsPlot.slice(-50);
@@ -886,7 +854,7 @@
                             backgroundColor: 'rgba(13, 110, 253, 0.08)',
                             borderWidth: 2,
                             tension: 0.1,
-                            pointRadius: 2,
+                            pointRadius: 3,
                             pointBackgroundColor: '#0d6efd',
                             fill: true
                         },
@@ -912,7 +880,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: false, // Smooth width expansion on tablets
                     plugins: { legend: { position: 'top', labels: { font: { size: 11, weight: 'bold' } } } },
                     scales: {
                         y: {
@@ -920,7 +888,7 @@
                             suggestedMin: Math.min(...dataPointsPlot, appleGlobalPendingLimits.min) - 3,
                             suggestedMax: Math.max(...dataPointsPlot, appleGlobalPendingLimits.max) + 3
                         },
-                        x: { ticks: { font: { size: 8, weight: 'semibold' }, maxRotation: 45, minRotation: 45 } }
+                        x: { ticks: { font: { size: 9, weight: 'semibold' }, maxRotation: 45, minRotation: 45 } }
                     }
                 }
             });
