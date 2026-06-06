@@ -63,7 +63,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine</h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-secondary fs-6 align-middle ms-2">v3.2.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -346,11 +346,10 @@
 
     /*
        ========================================================================
-       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (WAKE & VISUAL STATE SECURE)
+       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION
        ========================================================================
     */
     function forceVisualUnlockingSequence() {
-        // Force-unlocks CSS form visibility containers instantly on startup thread execution
         isInspectionActive = true;
         clearInterval(backgroundRefreshPollerId);
         
@@ -369,7 +368,6 @@
         if (!rawDraft) return;
         let draft = JSON.parse(rawDraft);
         
-        // Execute structural state unlock adjustments 
         forceVisualUnlockingSequence();
         
         document.getElementById('initials').value = draft.initials || "";
@@ -377,7 +375,6 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
         
-        // Wrap input value mapping in a microscopic layout-painting timeout delay thread
         setTimeout(() => {
             document.querySelectorAll('input[data-sec]').forEach(input => {
                 let name = input.getAttribute('data-name');
@@ -386,7 +383,7 @@
                     evaluateFieldStyle(input, input.getAttribute('data-sec'));
                 }
             });
-        }, 150); // 150ms structural paint gate delay handles iOS render queues smoothly
+        }, 150); 
     }
 
     function toggleKioskFormInterlock() {
@@ -468,7 +465,6 @@
     }
 
     function pullSystemStructure() {
-        // 🚨 CRITICAL HANDSHAKE LAYER RESTRUCTURING: Scan offline status rules first before calling cloud endpoints
         if (localStorage.getItem('five_star_active_draft_session')) {
             forceVisualUnlockingSequence();
         }
@@ -486,10 +482,8 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                // Assemble the DOM schema grid blocks completely
                 renderDynamicFormElements(res.structural_schema);
                 
-                // Hydrate the data nodes accurately if session draft parameters exist
                 if (localStorage.getItem('five_star_active_draft_session')) {
                     loadSavedDraftProgressData();
                 } else {
