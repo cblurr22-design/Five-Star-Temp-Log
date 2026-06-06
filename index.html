@@ -65,7 +65,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.2.2</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.3.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -212,7 +212,7 @@
     let clientObservedTemp = "72°F";
     let clientObservedCond = "Clear Sky";
     let activeDashboardMemoryCache = {};
-    let wakeLockInstance = null; // 🔒 iPad Device Wake Lock Container Reference
+    let wakeLockInstance = null; 
 
     function updateLiveClockAndWeather() {
         const now = new Date();
@@ -239,6 +239,9 @@
     }
 
     function lockSubmissionOnChanges() {
+        // If the form has already been verified and locked, do not allow edits to clear validation state
+        if(localStorage.getItem('five_star_form_validation_locked') === 'TRUE') return;
+        
         document.getElementById('finalSubmitBtn').disabled = true;
         document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
         document.getElementById('validateActionsBtn').style.display = "none";
@@ -316,11 +319,6 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
-    /*
-        ========================================================================
-        🛡️ REINFORCED INTERLOCK STATE RESTORATION ENGINE (v6.2.2 iOS SLEEP RECOVERY)
-        ========================================================================
-    */
     function forceVisualUnlockingSequence() {
         isInspectionActive = true;
         localStorage.setItem('five_star_kiosk_layout_interlock_active', 'TRUE');
@@ -332,6 +330,29 @@
         if (sessionBtn) {
             sessionBtn.innerText = "🛑 Cancel & Reset Route";
             sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+        }
+    }
+
+    /*
+        ========================================================================
+        🔒 ADVANCED LOCK DOWN & RUNTIME COMPLIANCE ENGINE
+        ========================================================================
+    */
+    function applyGlobalInputLockdownState(shouldLock) {
+        // Targets text inputs, selectors, textarea nodes, and temperature nodes
+        document.getElementById('initials').disabled = shouldLock;
+        document.getElementById('shift').disabled = shouldLock;
+        document.getElementById('freehandNotes').disabled = shouldLock;
+        document.getElementById('validateFormBtn').disabled = shouldLock;
+        
+        document.querySelectorAll('.walkway-input-node').forEach(input => {
+            input.disabled = shouldLock;
+        });
+
+        if (shouldLock) {
+            localStorage.setItem('five_star_form_validation_locked', 'TRUE');
+        } else {
+            localStorage.removeItem('five_star_form_validation_locked');
         }
     }
 
@@ -358,6 +379,10 @@
                         evaluateFieldStyle(input, input.getAttribute('data-sec'));
                     }
                 });
+                // Check if the recovery payload dictates a persistent verified lock state
+                if(localStorage.getItem('five_star_form_validation_locked') === 'TRUE') {
+                    runStageOneValidation();
+                }
             }
         });
 
@@ -373,10 +398,12 @@
                     evaluateFieldStyle(input, input.getAttribute('data-sec'));
                 }
             });
+            if(localStorage.getItem('five_star_form_validation_locked') === 'TRUE') {
+                runStageOneValidation();
+            }
         }
     }
 
-    // 📱 MOBILE SYSTEM EVENT WAKE/RESTORE PIPELINE
     function registerMobileWakeListeners() {
         const handleWakeRecovery = () => {
             let isInterlockActiveInMemory = localStorage.getItem('five_star_kiosk_layout_interlock_active') === 'TRUE';
@@ -395,7 +422,6 @@
         });
     }
 
-    // 🔒 SCREEN WAKE LOCK API EXECUTION SYSTEM
     async function requestScreenWakeLock() {
         if ('wakeLock' in navigator) {
             try {
@@ -432,7 +458,7 @@
                 
                 renderDynamicFormElements(activeStructuralMap);
                 forceVisualUnlockingSequence();
-                requestScreenWakeLock(); // <-- Initialize Wake Lock on route opening
+                requestScreenWakeLock(); 
                 saveDraftProgressData();
                 setTimeout(focusInitialWalkwayElement, 500);
             } else {
@@ -443,6 +469,7 @@
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
                 localStorage.removeItem('five_star_active_draft_session'); 
                 localStorage.removeItem('five_star_kiosk_layout_interlock_active');
+                localStorage.removeItem('five_star_form_validation_locked');
                 forceSessionShutdownReset();
             }
         }
@@ -452,6 +479,10 @@
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
         localStorage.removeItem('five_star_kiosk_layout_interlock_active');
+        localStorage.removeItem('five_star_form_validation_locked');
+        
+        applyGlobalInputLockdownState(false); // Restore baseline interface access limits
+        
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         document.getElementById('dynamicWizardContainer').innerHTML = '';
@@ -460,8 +491,12 @@
         sessionBtn.innerText = "🟢 Start New Inspection Route";
         sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
         
-        lockSubmissionOnChanges();
-        releaseScreenWakeLock(); // <-- Release Wake Lock on route exit
+        // Wipe verification states safely
+        document.getElementById('finalSubmitBtn').disabled = true;
+        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
+        document.getElementById('validateActionsBtn').style.display = "none";
+        
+        releaseScreenWakeLock(); 
         bootUpOfflineFirstWorkspace();
     }
 
@@ -622,13 +657,13 @@
             input.removeEventListener('focus', handleWalkwayFocusHighlighter);
             input.removeEventListener('blur', handleWalkwayBlurClearer);
             input.removeEventListener('input', handleNativeInputOverride);
-            input.removeEventListener('blur', saveDraftProgressData); // Anti-duplicate removal
+            input.removeEventListener('blur', saveDraftProgressData); 
             
             input.addEventListener('keydown', handleWalkwayKeyboardInterration);
             input.addEventListener('focus', handleWalkwayFocusHighlighter);
             input.addEventListener('blur', handleWalkwayBlurClearer);
             input.addEventListener('input', handleNativeInputOverride);
-            input.addEventListener('blur', saveDraftProgressData); // 🛡️ Saves state instantly if focus drops on tablet sleep
+            input.addEventListener('blur', saveDraftProgressData); 
         });
     }
 
@@ -983,22 +1018,24 @@
             return; 
         }
         
+        // 🔒 SUCCESSFUL DATA VERIFICATION VALIDATED: Freeze interface controls entirely
+        applyGlobalInputLockdownState(true);
+
         if (errorsLogged > 0) {
             document.getElementById('validateActionsBtn').style.display = "block";
-            alert(`⚠️ Action Required: Detected ${errorsLogged} temperature issues. Complete corrective protocols below.`);
+            alert(`🔒 Sheet Saved & Locked: Detected ${errorsLogged} temperature exceptions. Complete required corrective action checkboxes below to submit.`);
             if (firstFailedSectionId) {
                 setTimeout(() => {
                     let targetSectionBlock = document.getElementById(`block-${firstFailedSectionId}`);
                     if (targetSectionBlock) { targetSectionBlock.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
                 }, 150);
-                
             }
             return;
         }
 
         document.getElementById('finalSubmitBtn').disabled = false;
         document.getElementById('finalSubmitBtn').classList.replace('btn-secondary', 'btn-success');
-        alert("✅ Worksheet successfully verified! Data submission switch opened.");
+        alert("✅ Worksheet successfully locked and verified! Transmission switch opened.");
     }
 
     function runStageTwoValidation() {
@@ -1077,6 +1114,7 @@
             alert("🚀 Log secure-synced to spreadsheet records!");
             localStorage.removeItem('five_star_active_draft_session'); 
             localStorage.removeItem('five_star_kiosk_layout_interlock_active');
+            localStorage.removeItem('five_star_form_validation_locked');
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
@@ -1115,7 +1153,7 @@
 
     window.onload = function() {
         updateLiveClockAndWeather();
-        registerMobileWakeListeners(); // 📱 Activates native lock recovery layer
+        registerMobileWakeListeners(); 
         bootUpOfflineFirstWorkspace();
     };
 </script>
