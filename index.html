@@ -1,4 +1,6 @@
-<!DOCTYPE html><html lang="en"><head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Five Star Refrigeration Check System</title>
@@ -58,11 +60,15 @@
             .form-check-label { font-size: 13px !important; font-weight: 600 !important; padding-left: 6px; }
             .form-check-input { width: 1.4em !important; height: 1.4em !important; margin-top: 0.15em !important; }
         }
-    </style></head><body><div class="container-fluid py-4">
+    </style>
+</head>
+<body>
+
+<div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.0 Persistent</span></h2>
-            <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.5</span></h2>
+            <small>Persistent iPad Draft Recovery Layout Module</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
@@ -75,6 +81,7 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm history-nav-btn" id="navPrevBtn" onclick="navigateHistory(-1)">◀ Back</button>
                     <button type="button" class="btn btn-outline-primary btn-sm history-nav-btn" id="navLiveBtn" onclick="jumpToLiveStream()">Live</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm history-nav-btn" id="navNextBtn" onclick="navigateHistory(1)">Forward ▶</button>
+                    <button type="button" class="btn btn-outline-success btn-sm history-nav-btn" id="manualRefreshBtn" onclick="manualRefreshCloudData()">Refresh</button>
                 </div>
                 <span id="dashboardModeIndicator" class="badge bg-success live-indicator">● Real-Time Cloud</span>
             </div>
@@ -157,7 +164,10 @@
                 </form>
             </div>
         </div>
-    </div></div><div class="modal fade" id="trendChartModal" tabindex="-1" aria-hidden="true">
+    </div>
+</div>
+
+<div class="modal fade" id="trendChartModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered full-screen-fluid-dialog">
         <div class="modal-content shadow-lg">
             <div class="modal-header bg-dark text-white">
@@ -170,7 +180,11 @@
                 </div>
             </div>
         </div>
-    </div></div><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script><script>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
     const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbwzuacLcc1hszemBVo3S-hWtfP57tSx7ZpKlyWFOBrE8DMjXtiDgdCfLToFFQqqUJyH/exec";
 
     const limitsSchema = {
@@ -201,6 +215,18 @@
     
     let activeDashboardMemoryCache = {};
     let absoluteLastSyncTimestampMemory = Date.now();
+
+    const DRAFT_PRIMARY_KEY = 'five_star_active_draft_session';
+    const DRAFT_BACKUP_KEY = 'five_star_active_draft_session_backup';
+    const DRAFT_SESSION_KEY = 'five_star_active_draft_session_runtime';
+    const DRAFT_DB_NAME = 'five_star_refrigeration_draft_db';
+    const DRAFT_DB_STORE = 'drafts';
+    const DRAFT_DB_RECORD_ID = 'active_route';
+
+    let isHydratingDraftFromStorage = false;
+    let lastAppliedDraftSnapshot = null;
+    let lastFocusedWalkIndexMemory = null;
+    let persistentSaveTimerId = null;
 
     function updateLiveClockAndWeather() {
         const now = new Date();
@@ -308,118 +334,293 @@
         }
     }
 
-    /*
-       ===================================================================================
-       🛡️ LOCAL STORAGE PROTOCOLS: HIGH-VISIBILITY IPAD LOCK SHIELD
-       ===================================================================================
-    */
-    function saveDraftProgressData() {
-        if (!isInspectionActive) return;
-        
-        let draftState = {
-            inspectionIsRunningFlag: true,
-            initials: document.getElementById('initials').value,
-            shift: document.getElementById('shift').value,
-            freehandNotes: document.getElementById('freehandNotes').value,
-            temperatures: {}
+    function safeStorageSet(storageArea, key, value) {
+        try { storageArea.setItem(key, value); } catch (err) { console.warn('Storage write skipped:', key, err); }
+    }
+
+    function safeStorageGet(storageArea, key) {
+        try { return storageArea.getItem(key); } catch (err) { return null; }
+    }
+
+    function safeParseDraft(rawValue) {
+        if (!rawValue) return null;
+        try {
+            const parsed = JSON.parse(rawValue);
+            if (!parsed || typeof parsed !== 'object') return null;
+            return parsed;
+        } catch (err) {
+            console.warn('Draft parse failed:', err);
+            return null;
+        }
+    }
+
+    function getBestSynchronousDraft() {
+        const candidates = [
+            safeParseDraft(safeStorageGet(localStorage, DRAFT_PRIMARY_KEY)),
+            safeParseDraft(safeStorageGet(localStorage, DRAFT_BACKUP_KEY)),
+            safeParseDraft(safeStorageGet(sessionStorage, DRAFT_SESSION_KEY))
+        ].filter(Boolean);
+
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0));
+        return candidates[0];
+    }
+
+    function openDraftDatabase() {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+            const request = indexedDB.open(DRAFT_DB_NAME, 1);
+            request.onupgradeneeded = function(event) {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(DRAFT_DB_STORE)) db.createObjectStore(DRAFT_DB_STORE, { keyPath: 'id' });
+            };
+            request.onsuccess = function(event) { resolve(event.target.result); };
+            request.onerror = function(event) { reject(event.target.error); };
+        });
+    }
+
+    function saveDraftToIndexedDB(draft) {
+        openDraftDatabase().then(db => {
+            const tx = db.transaction(DRAFT_DB_STORE, 'readwrite');
+            tx.objectStore(DRAFT_DB_STORE).put({ id: DRAFT_DB_RECORD_ID, draft: draft, savedAt: draft.savedAt });
+            tx.oncomplete = function() { db.close(); };
+            tx.onerror = function() { db.close(); };
+        }).catch(err => console.warn('IndexedDB draft save skipped:', err));
+    }
+
+    function loadDraftFromIndexedDB() {
+        return openDraftDatabase().then(db => new Promise((resolve) => {
+            const tx = db.transaction(DRAFT_DB_STORE, 'readonly');
+            const req = tx.objectStore(DRAFT_DB_STORE).get(DRAFT_DB_RECORD_ID);
+            req.onsuccess = function() { resolve(req.result ? req.result.draft : null); };
+            req.onerror = function() { resolve(null); };
+            tx.oncomplete = function() { db.close(); };
+            tx.onerror = function() { db.close(); resolve(null); };
+        })).catch(() => null);
+    }
+
+    function clearAllSavedDraftCopies() {
+        try { localStorage.removeItem(DRAFT_PRIMARY_KEY); } catch (err) {}
+        try { localStorage.removeItem(DRAFT_BACKUP_KEY); } catch (err) {}
+        try { sessionStorage.removeItem(DRAFT_SESSION_KEY); } catch (err) {}
+        openDraftDatabase().then(db => {
+            const tx = db.transaction(DRAFT_DB_STORE, 'readwrite');
+            tx.objectStore(DRAFT_DB_STORE).delete(DRAFT_DB_RECORD_ID);
+            tx.oncomplete = function() { db.close(); };
+            tx.onerror = function() { db.close(); };
+        }).catch(() => {});
+    }
+
+    function buildCurrentDraftSnapshot() {
+        const activeElement = document.activeElement;
+        let focusName = '';
+        let focusWalkIndex = '';
+        if (activeElement && activeElement.matches && activeElement.matches('input[data-sec]')) {
+            focusName = activeElement.getAttribute('data-name') || '';
+            focusWalkIndex = activeElement.getAttribute('data-walk-index') || '';
+        }
+
+        let draft = {
+            schemaVersion: '1.3.5-ipad-persistent-draft',
+            initials: document.getElementById('initials') ? document.getElementById('initials').value : '',
+            shift: document.getElementById('shift') ? document.getElementById('shift').value : '',
+            freehandNotes: document.getElementById('freehandNotes') ? document.getElementById('freehandNotes').value : '',
+            temperatures: {},
+            checkboxes: runtimeCheckboxStateMemory || {},
+            activeStructuralMap: activeStructuralMap || {},
+            rawCloudSequenceMap: rawCloudSequenceMap || {},
+            calculatedOrderNames: calculatedSequenceArray.map(input => input.getAttribute('data-name')),
+            focusName: focusName,
+            focusWalkIndex: focusWalkIndex,
+            scrollY: window.scrollY || document.documentElement.scrollTop || 0,
+            isInspectionActive: isInspectionActive,
+            savedAt: new Date().toISOString()
         };
 
         document.querySelectorAll('input[data-sec]').forEach(input => {
-            if (input.value.trim() !== "") {
-                draftState.temperatures[input.id] = input.value;
-            }
+            draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
 
-        // Save layout structures locally to survive hard reloads while route is open
-        localStorage.setItem('five_star_structural_blueprint_mirror', JSON.stringify(activeStructuralMap));
-        localStorage.setItem('five_star_sequence_map_mirror', JSON.stringify(rawCloudSequenceMap));
-        localStorage.setItem('five_star_active_draft_session', JSON.stringify(draftState));
+        return draft;
     }
 
-    function checkAndRecoverActiveFormState() {
-        let activeRouteToken = localStorage.getItem('five_star_active_draft_session');
-        let structuralMirror = localStorage.getItem('five_star_structural_blueprint_mirror');
-        let sequenceMirror = localStorage.getItem('five_star_sequence_map_mirror');
+    function draftHasMeaningfulProgress(draft) {
+        if (!draft) return false;
+        if ((draft.initials || '').trim() !== '') return true;
+        if ((draft.shift || '').trim() !== '') return true;
+        if ((draft.freehandNotes || '').trim() !== '') return true;
+        if (draft.temperatures) {
+            for (let key in draft.temperatures) {
+                if (String(draft.temperatures[key] || '').trim() !== '') return true;
+            }
+        }
+        if (draft.checkboxes && Object.keys(draft.checkboxes).length > 0) return true;
+        return !!draft.isInspectionActive;
+    }
 
-        if (!activeRouteToken || !structuralMirror) return false;
+    function saveDraftProgressData(forceSave) {
+        if (isHydratingDraftFromStorage) return;
 
-        let draft = JSON.parse(activeRouteToken);
-        if (!draft.inspectionIsRunningFlag) return false;
+        const existingDraft = getBestSynchronousDraft();
+        const draft = buildCurrentDraftSnapshot();
+        const hasFormNodes = document.querySelectorAll('input[data-sec]').length > 0;
+        const shouldSave = forceSave || isInspectionActive || draftHasMeaningfulProgress(draft) || draftHasMeaningfulProgress(existingDraft);
 
-        // Immediately mount layout mirrors before firing network traffic
-        activeStructuralMap = JSON.parse(structuralMirror);
-        rawCloudSequenceMap = sequenceMirror ? JSON.parse(sequenceMirror) : {};
+        // Prevent an iPad wake/reload from overwriting a real saved route with an empty page before the dynamic form exists.
+        if (!shouldSave) return;
+        if (!hasFormNodes && draftHasMeaningfulProgress(existingDraft) && !draftHasMeaningfulProgress(draft)) return;
 
-        isInspectionActive = true;
-        clearInterval(backgroundRefreshPollerId);
+        const payload = JSON.stringify(draft);
+        safeStorageSet(localStorage, DRAFT_PRIMARY_KEY, payload);
+        safeStorageSet(localStorage, DRAFT_BACKUP_KEY, payload);
+        safeStorageSet(sessionStorage, DRAFT_SESSION_KEY, payload);
+        saveDraftToIndexedDB(draft);
+        lastAppliedDraftSnapshot = draft;
+    }
 
-        renderDynamicFormElements(activeStructuralMap);
+    function applySavedDraftToRenderedForm(draft) {
+        if (!draft) return false;
+        isHydratingDraftFromStorage = true;
+        try {
+            isInspectionActive = true;
+            clearInterval(backgroundRefreshPollerId);
 
-        document.getElementById('initials').value = draft.initials || "";
-        document.getElementById('shift').value = draft.shift || "";
-        document.getElementById('freehandNotes').value = draft.freehandNotes || "";
-        runtimeCheckboxStateMemory = draft.checkboxes || {};
+            document.getElementById('initials').value = draft.initials || '';
+            document.getElementById('shift').value = draft.shift || '';
+            document.getElementById('freehandNotes').value = draft.freehandNotes || '';
+            runtimeCheckboxStateMemory = draft.checkboxes || {};
 
-        document.querySelectorAll('input[data-sec]').forEach(input => {
-            if (draft.temperatures && draft.temperatures[input.id] !== undefined) {
-                input.value = draft.temperatures[input.id];
-                
-                let sectionId = input.getAttribute('data-sec');
-                let numericValue = parseFloat(input.value);
-                if (!isNaN(numericValue)) {
+            document.querySelectorAll('input[data-sec]').forEach(input => {
+                let name = input.getAttribute('data-name');
+                if (draft.temperatures && Object.prototype.hasOwnProperty.call(draft.temperatures, name)) {
+                    input.value = draft.temperatures[name];
                     input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
-                    input.classList.add(determineStatusClass(numericValue, limitsSchema[sectionId]));
+                    const value = parseFloat(input.value);
+                    if (!isNaN(value)) input.classList.add(determineStatusClass(value, limitsSchema[input.getAttribute('data-sec')]));
+                }
+            });
+
+            document.querySelectorAll('.action-checkbox-node').forEach(cb => {
+                const coolerKey = cb.getAttribute('data-cooler-key');
+                const val = cb.value;
+                if (runtimeCheckboxStateMemory[coolerKey] && runtimeCheckboxStateMemory[coolerKey][val] !== undefined) cb.checked = !!runtimeCheckboxStateMemory[coolerKey][val];
+            });
+
+            document.getElementById('masterForm').classList.remove('form-locked-state');
+            const sessionBtn = document.getElementById('kioskSessionBtn');
+            sessionBtn.innerText = '🛑 Reset Route';
+            sessionBtn.className = 'btn btn-danger fw-bold px-4 shadow-sm';
+
+            lockSubmissionOnChanges();
+            lastAppliedDraftSnapshot = draft;
+
+            setTimeout(() => {
+                let focusTarget = null;
+                if (draft.focusName) focusTarget = Array.from(document.querySelectorAll('input[data-sec]')).find(input => input.getAttribute('data-name') === draft.focusName);
+                if (!focusTarget && draft.focusWalkIndex !== undefined && draft.focusWalkIndex !== '') focusTarget = calculatedSequenceArray[parseInt(draft.focusWalkIndex, 10)];
+                if (focusTarget) {
+                    focusTarget.focus();
+                    focusTarget.scrollIntoView({ behavior: 'auto', block: 'center' });
+                } else if (typeof draft.scrollY === 'number') {
+                    window.scrollTo(0, draft.scrollY);
+                }
+            }, 150);
+
+            return true;
+        } finally {
+            isHydratingDraftFromStorage = false;
+            saveDraftProgressData(true);
+        }
+    }
+
+    function loadSavedDraftProgressData(optionalDraft) {
+        const draft = optionalDraft || getBestSynchronousDraft();
+        if (!draft) return false;
+
+        if (draft.activeStructuralMap && Object.keys(draft.activeStructuralMap).length > 0 && document.querySelectorAll('input[data-sec]').length === 0) {
+            activeStructuralMap = draft.activeStructuralMap;
+            rawCloudSequenceMap = draft.rawCloudSequenceMap || {};
+            renderDynamicFormElements(activeStructuralMap);
+        }
+
+        return applySavedDraftToRenderedForm(draft);
+    }
+
+    function installPersistentFormStateGuards() {
+        const immediateSave = function() { saveDraftProgressData(true); };
+        ['input', 'change', 'keyup', 'touchend', 'compositionend', 'blur'].forEach(eventName => {
+            document.addEventListener(eventName, immediateSave, true);
+        });
+        ['visibilitychange', 'freeze', 'resume'].forEach(eventName => {
+            document.addEventListener(eventName, immediateSave, true);
+        });
+        window.addEventListener('pagehide', immediateSave);
+        window.addEventListener('beforeunload', immediateSave);
+        window.addEventListener('blur', immediateSave);
+        clearInterval(persistentSaveTimerId);
+        persistentSaveTimerId = setInterval(immediateSave, 750);
+    }
+
+    function hydrateFromSavedDraftBeforeCloudRefresh() {
+        const draft = getBestSynchronousDraft();
+        if (draft && draftHasMeaningfulProgress(draft)) {
+            if (draft.activeStructuralMap && Object.keys(draft.activeStructuralMap).length > 0) {
+                activeStructuralMap = draft.activeStructuralMap;
+                rawCloudSequenceMap = draft.rawCloudSequenceMap || {};
+                renderDynamicFormElements(activeStructuralMap);
+                applySavedDraftToRenderedForm(draft);
+            } else {
+                pullSystemStructure({ restoreAfterLoad: true, forceRender: true, userInitiated: false });
+            }
+            return true;
+        }
+
+        loadDraftFromIndexedDB().then(idbDraft => {
+            if (idbDraft && draftHasMeaningfulProgress(idbDraft) && !isInspectionActive) {
+                const payload = JSON.stringify(idbDraft);
+                safeStorageSet(localStorage, DRAFT_PRIMARY_KEY, payload);
+                safeStorageSet(localStorage, DRAFT_BACKUP_KEY, payload);
+                if (idbDraft.activeStructuralMap && Object.keys(idbDraft.activeStructuralMap).length > 0) {
+                    activeStructuralMap = idbDraft.activeStructuralMap;
+                    rawCloudSequenceMap = idbDraft.rawCloudSequenceMap || {};
+                    renderDynamicFormElements(activeStructuralMap);
+                    applySavedDraftToRenderedForm(idbDraft);
+                } else {
+                    pullSystemStructure({ restoreAfterLoad: true, forceRender: true, userInitiated: false });
                 }
             }
         });
 
-        document.getElementById('masterForm').classList.remove('form-locked-state');
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        sessionBtn.innerText = "🛑 Cancel & Reset Route";
-        sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-        return true;
+        return false;
     }
 
     function toggleKioskFormInterlock() {
         const targetForm = document.getElementById('masterForm');
         const sessionBtn = document.getElementById('kioskSessionBtn');
-        
+
         if (!isInspectionActive) {
             isInspectionActive = true;
-            clearInterval(backgroundRefreshPollerId); 
+            clearInterval(backgroundRefreshPollerId);
             runtimeCheckboxStateMemory = {};
-            
-            sessionBtn.innerText = "⏳ Syncing Store Database Layout...";
-            sessionBtn.className = "btn btn-secondary fw-bold px-4 shadow-sm";
-            
-            fetch(cloudSpreadsheetURL)
-            .then(res => res.json())
-            .then(res => {
-                if (res.status === "success") {
-                    activeStructuralMap = res.structural_schema;
-                    
-                    if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
-                    else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
-                    else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
-                    else rawCloudSequenceMap = {};
-                    
-                    renderDynamicFormElements(res.structural_schema);
-                    if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                    if (res.current_status) activeDashboardMemoryCache = res.current_status;
-                    
-                    targetForm.classList.remove('form-locked-state');
-                    sessionBtn.innerText = "🛑 Cancel & Reset Route";
-                    sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-                    saveDraftProgressData(); 
-                    
-                    setTimeout(focusInitialWalkwayElement, 500);
-                }
+
+            sessionBtn.innerText = '⏳ Loading Store Database Layout...';
+            sessionBtn.className = 'btn btn-secondary fw-bold px-4 shadow-sm';
+
+            pullSystemStructure({ restoreAfterLoad: false, forceRender: true, userInitiated: true, startNewRoute: true }).then(() => {
+                targetForm.classList.remove('form-locked-state');
+                sessionBtn.innerText = '🛑 Reset Route';
+                sessionBtn.className = 'btn btn-danger fw-bold px-4 shadow-sm';
+                saveDraftProgressData(true);
+                setTimeout(focusInitialWalkwayElement, 500);
+            }).catch(() => {
+                sessionBtn.innerText = '🟢 Start New Inspection Route';
+                sessionBtn.className = 'btn btn-success fw-bold px-4 shadow-sm';
+                isInspectionActive = false;
+                alert('Could not load the store layout. Check the connection and try again.');
             });
         } else {
-            if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                localStorage.removeItem('five_star_active_draft_session'); 
-                localStorage.removeItem('five_star_structural_blueprint_mirror');
-                localStorage.removeItem('five_star_sequence_map_mirror');
+            if (confirm('Reset this route? This is the only action that erases the saved in-progress draft.')) {
+                clearAllSavedDraftCopies();
                 forceSessionShutdownReset();
             }
         }
@@ -428,9 +629,7 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
-        localStorage.removeItem('five_star_active_draft_session');
-        localStorage.removeItem('five_star_structural_blueprint_mirror');
-        localStorage.removeItem('five_star_sequence_map_mirror');
+        clearAllSavedDraftCopies();
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         
@@ -442,50 +641,63 @@
         pullSystemStructure();
         
         absoluteLastSyncTimestampMemory = Date.now();
-        startAutomaticDashboardPolling(); 
+        // Automatic background polling disabled for iPad draft safety.
     }
 
     function startAutomaticDashboardPolling() {
+        // Disabled intentionally: iPad Safari may reload after screen lock.
+        // Cloud refreshes now happen only from user actions inside the app.
         clearInterval(backgroundRefreshPollerId);
-        
-        backgroundRefreshPollerId = setInterval(() => {
-            const rightNow = Date.now();
-            const fifteenMinutesInMilliseconds = 15 * 60 * 1000;
-            
-            if (!isInspectionActive && currentViewerIndex === -1) {
-                if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
-                    console.log("⏰ 15-Minute Milestone reached. Connecting to spreadsheet data stream...");
-                    absoluteLastSyncTimestampMemory = rightNow;
-                    pullSystemStructure(); 
-                }
-            }
-        }, 30000); 
+        backgroundRefreshPollerId = null;
     }
 
-    function pullSystemStructure() {
-        // Intercept boot sequence: if an unsubmitted route session is active, draw form metrics offline instantly
-        if (checkAndRecoverActiveFormState()) {
-            console.log("🛡️ Lock wake intercepted. Form rehydrated from local storage mirror.");
+    function manualRefreshCloudData() {
+        if (isInspectionActive) {
+            alert('Finish or reset the active inspection before refreshing cloud data. Your draft is still saved.');
+            saveDraftProgressData(true);
+            return;
+        }
+        pullSystemStructure({ restoreAfterLoad: false, forceRender: true, userInitiated: true });
+    }
+
+    function pullSystemStructure(options) {
+        options = options || {};
+        const restoreAfterLoad = !!options.restoreAfterLoad;
+        const forceRender = !!options.forceRender;
+        const startNewRoute = !!options.startNewRoute;
+
+        if (isInspectionActive && !restoreAfterLoad && !startNewRoute && !forceRender) {
+            saveDraftProgressData(true);
+            return Promise.resolve(null);
         }
 
-        fetch(cloudSpreadsheetURL)
+        return fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
-            if (res.status === "success") {
-                // Secure barrier: prevent background fetch cycles from overwriting data entry layouts mid-route
-                if (!isInspectionActive) { 
-                    activeStructuralMap = res.structural_schema;
-                    if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
-                    else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
-                    else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
-                    renderDynamicFormElements(res.structural_schema); 
+            if (res.status === 'success') {
+                activeStructuralMap = res.structural_schema || activeStructuralMap || {};
+
+                if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
+                else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
+                else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
+                else rawCloudSequenceMap = rawCloudSequenceMap || {};
+
+                if (forceRender || (!isInspectionActive && document.querySelectorAll('input[data-sec]').length === 0)) {
+                    renderDynamicFormElements(activeStructuralMap);
                 }
-                
+
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
-                
-                if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
+
+                if (restoreAfterLoad) {
+                    loadSavedDraftProgressData();
+                } else if (startNewRoute) {
+                    saveDraftProgressData(true);
+                }
+
+                if (!isInspectionActive && currentViewerIndex === -1 && res.current_status) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
+            return res;
         });
     }
 
@@ -517,6 +729,11 @@
         }
 
         rebuildDynamicCloudSequenceArray();
+
+        const pendingDraft = getBestSynchronousDraft();
+        if (pendingDraft && draftHasMeaningfulProgress(pendingDraft) && isInspectionActive) {
+            applySavedDraftToRenderedForm(pendingDraft);
+        }
     }
 
     function rebuildDynamicCloudSequenceArray() {
@@ -535,7 +752,7 @@
                 if (rawCloudSequenceMap[nameB] !== undefined) rawOrderB = rawCloudSequenceMap[nameB];
                 
                 let orderA = (rawOrderA === "" || rawOrderA === null || isNaN(parseFloat(rawOrderA))) ? 9999 : parseFloat(rawOrderA);
-                let orderB = (rawOrderB === "" || rawOrderB === null || isNaN(parseFloat(rawOrderB))) ? 9999 : parseFloat(orderB);
+                let orderB = (rawOrderB === "" || rawOrderB === null || isNaN(parseFloat(rawOrderB))) ? 9999 : parseFloat(rawOrderB);
                 
                 return orderA - orderB;
             });
@@ -571,6 +788,8 @@
         const containerId = inputId.replace('input-', 'container-');
         const containerNode = document.getElementById(containerId);
         if (containerNode) containerNode.classList.add('active-walkway-focus');
+        lastFocusedWalkIndexMemory = e.target.getAttribute('data-walk-index');
+        saveDraftProgressData(true);
     }
 
     function handleWalkwayBlurClearer(e) {
@@ -754,12 +973,6 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
-            
-            // Hard purge active tokens ONLY after confirming successful database insertion
-            localStorage.removeItem('five_star_active_draft_session');
-            localStorage.removeItem('five_star_structural_blueprint_mirror');
-            localStorage.removeItem('five_star_sequence_map_mirror');
-            
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
@@ -798,15 +1011,19 @@
 
     /*
        ========================================================================
-       🛰️ PURE UNALTERED CHRONOLOGICAL WINDOW.ONLOAD FROM BUILD v1.3.0
+       🛡️ REINFORCED CHART INJECTION SEQUENCE (MAX 50 CHRONOLOGICAL RECORDS)
        ========================================================================
     */
-    window.onload = function() {
-        absoluteLastSyncTimestampMemory = Date.now();
+    document.addEventListener('DOMContentLoaded', function() {
+        installPersistentFormStateGuards();
         updateLiveClockAndWeather();
         setInterval(updateLiveClockAndWeather, 60000);
-        pullSystemStructure();
-        startAutomaticDashboardPolling(); 
+
+        const restoredFromDraft = hydrateFromSavedDraftBeforeCloudRefresh();
+        if (!restoredFromDraft) {
+            pullSystemStructure({ restoreAfterLoad: false, forceRender: true, userInitiated: false });
+        }
+        startAutomaticDashboardPolling();
         
         var targetModalNode = document.getElementById('trendChartModal');
         targetModalNode.addEventListener('shown.bs.modal', function () {
@@ -837,6 +1054,7 @@
                 }
             }
             
+            // Truncate logic restricted strictly to the final 50 references
             if (labelsTimeline.length > 50) {
                 labelsTimeline = labelsTimeline.slice(-50);
                 dataPointsPlot = dataPointsPlot.slice(-50);
@@ -885,7 +1103,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: false, // Smooth width expansion on tablets
                     plugins: { legend: { position: 'top', labels: { font: { size: 11, weight: 'bold' } } } },
                     scales: {
                         y: {
@@ -898,5 +1116,7 @@
                 }
             });
         });
-    };
-</script></body></html>
+    });
+</script>
+</body>
+</html>
