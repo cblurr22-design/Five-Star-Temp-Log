@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Five Star Refrigeration Check System</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -35,7 +33,6 @@
         .custom-yellow-notes-badge { background-color: #ffc107 !important; color: #000000 !important; font-weight: 700 !important; border: 2px solid #000000 !important; }
         .history-nav-btn { padding: 2px 10px; font-size: 13px; font-weight: bold; border-radius: 4px; }
         .live-indicator { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-        .form-locked-state { opacity: 0.4; pointer-events: none; }
         .alert-item-container { scroll-margin-top: 80px; padding: 6px; border-radius: 4px; transition: background-color 0.3s; }
         .weather-meta-text { font-size: 11px; font-weight: bold; color: #0d6efd; display: block; margin-top: 2px; }
         
@@ -65,12 +62,13 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v7.0.0 (Hardened Mutation Lock)</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v8.0.0 (State-Free Matrix)</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
+    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -91,6 +89,7 @@
         <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard metrics.</div>
     </div>
 
+    <!-- Manager Asset Console -->
     <div class="card p-3 mb-4 bg-light border-warning">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="text-dark fw-bold mb-0">⚙️ Manager Asset Governance Console</h5>
@@ -125,15 +124,18 @@
         </div>
     </div>
 
+    <!-- Digital Input Worksheet Panel Area -->
     <div class="row">
         <div class="col-12 col-lg-7">
             <div class="card p-4 shadow-sm border-primary" style="border-width: 2px;">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
                     <h4 class="text-secondary mb-0">📝 Digital Floor Log Sheet</h4>
-                    <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-4 shadow-sm">🟢 Start New Inspection Route</button>
+                    <!-- 🎯 Visual state controller button removed: Sheet runs permanently unlocked -->
+                    <button type="button" onclick="executeManualClearDiscard()" class="btn btn-outline-danger fw-bold btn-sm px-3 shadow-sm">🗑️ Reset Active Grid Values</button>
                 </div>
                 
-                <form id="masterForm" class="form-locked-state" novalidate>
+                <!-- 🚀 form-locked-state completely stripped out. Form is active permanently -->
+                <form id="masterForm" novalidate>
                     <div class="row mb-4 bg-light p-3 rounded border">
                         <div class="col-6">
                             <label class="form-label fw-bold">Inspector Initials</label>
@@ -199,7 +201,6 @@
     let activeStructuralMap = {};
     let localCacheHistory = []; 
     let currentViewerIndex = -1; 
-    let isInspectionActive = false;
     let runtimeCheckboxStateMemory = {};
     let globalChartInstanceReference = null; 
     
@@ -299,7 +300,6 @@
     }
 
     function saveDraftProgressData() {
-        if (!isInspectionActive) return;
         let draft = {
             initials: document.getElementById('initials').value,
             shift: document.getElementById('shift').value,
@@ -315,28 +315,8 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
-    /*
-       ========================================================================
-       🛡️ DETERMINISTIC OBSERVER ENGINE (GUARANTEES 100% TIMEOUT SURVIVAL)
-       ========================================================================
-    */
-    function forceVisualUnlockingSequence() {
-        isInspectionActive = true;
-        localStorage.setItem('five_star_kiosk_layout_interlock_active', 'TRUE');
-        
-        const masterFormNode = document.getElementById('masterForm');
-        if (masterFormNode) masterFormNode.classList.remove('form-locked-state');
-        
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        if (sessionBtn) {
-            sessionBtn.innerText = "🛑 Cancel & Reset Route";
-            sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-        }
-    }
-
     function loadSavedDraftProgressData() {
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
-        forceVisualUnlockingSequence();
         if (!rawDraft) return;
         let draft = JSON.parse(rawDraft);
         
@@ -345,15 +325,11 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
 
-        // 🎯 THE OBSERVER TRIPWIRE: Explicitly locks execution until hardware verifies form injection
         const formContainerTarget = document.getElementById('dynamicWizardContainer');
-        
         const observerInstance = new MutationObserver(function(mutations, observerRef) {
             var inputElementsMesh = document.querySelectorAll('input[data-sec]');
-            
             if (inputElementsMesh.length > 0) {
-                observerRef.disconnect(); // Stand down observer once fields are found
-                
+                observerRef.disconnect();
                 inputElementsMesh.forEach(input => {
                     let name = input.getAttribute('data-name');
                     if (draft.temperatures && draft.temperatures[name] !== undefined) {
@@ -366,7 +342,6 @@
 
         observerInstance.observe(formContainerTarget, { childList: true, subtree: true });
         
-        // Immediate execution fail-safe pass
         var instantScan = document.querySelectorAll('input[data-sec]');
         if (instantScan.length > 0) {
             observerInstance.disconnect();
@@ -380,51 +355,16 @@
         }
     }
 
-    function toggleKioskFormInterlock() {
-        const targetForm = document.getElementById('masterForm');
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        
-        if (!isInspectionActive) {
-            isInspectionActive = true;
-            runtimeCheckboxStateMemory = {};
-            
-            let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
-            if (offlineSchemaRaw) {
-                activeStructuralMap = JSON.parse(offlineSchemaRaw);
-                let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
-                if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
-                
-                renderDynamicFormElements(activeStructuralMap);
-                forceVisualUnlockingSequence();
-                saveDraftProgressData();
-                setTimeout(focusInitialWalkwayElement, 500);
-            } else {
-                alert("📋 System layout missing. Tap 'Sync Cloud Database Structure' to calibrate device parameters.");
-                isInspectionActive = false;
-            }
-        } else {
-            if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                localStorage.removeItem('five_star_active_draft_session'); 
-                localStorage.removeItem('five_star_kiosk_layout_interlock_active');
-                forceSessionShutdownReset();
-            }
+    function executeManualClearDiscard() {
+        if (confirm("Clear all currently typed temperatures and notes from the active device?")) {
+            localStorage.removeItem('five_star_active_draft_session');
+            document.getElementById('masterForm').reset();
+            let inputs = document.querySelectorAll('input[data-sec]');
+            inputs.forEach(input => {
+                input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
+            });
+            lockSubmissionOnChanges();
         }
-    }
-
-    function forceSessionShutdownReset() {
-        isInspectionActive = false;
-        runtimeCheckboxStateMemory = {};
-        localStorage.removeItem('five_star_kiosk_layout_interlock_active');
-        document.getElementById('masterForm').reset();
-        document.getElementById('masterForm').classList.add('form-locked-state');
-        document.getElementById('dynamicWizardContainer').innerHTML = '';
-        
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        sessionBtn.innerText = "🟢 Start New Inspection Route";
-        sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
-        
-        lockSubmissionOnChanges();
-        bootUpOfflineFirstWorkspace();
     }
 
     function executeManualCloudSyncHandshake() {
@@ -469,11 +409,8 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                if (!isInspectionActive) {
-                    renderDynamicFormElements(res.structural_schema);
-                } else {
-                    rebuildDynamicCloudSequenceArray();
-                }
+                renderDynamicFormElements(res.structural_schema);
+                loadSavedDraftProgressData();
                 
                 processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
                 syncBtn.innerText = "✅ Sync Complete";
@@ -495,8 +432,6 @@
         let offlineStatusRaw = localStorage.getItem('five_star_status_cache');
         let offlineMetaRaw = localStorage.getItem('five_star_meta_log') || "Cached Local Mirror";
         let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
-        
-        let isInterlockActiveInMemory = localStorage.getItem('five_star_kiosk_layout_interlock_active') === 'TRUE';
 
         if (offlineSchemaRaw) {
             activeStructuralMap = JSON.parse(offlineSchemaRaw);
@@ -505,16 +440,11 @@
             if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
 
             renderDynamicFormElements(activeStructuralMap);
-
-            if (isInterlockActiveInMemory) {
-                loadSavedDraftProgressData();
-            } else {
-                if (!isInspectionActive) {
-                    document.getElementById('masterForm').reset();
-                    document.getElementById('masterForm').classList.add('form-locked-state');
-                }
-            }
+            loadSavedDraftProgressData();
             processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
+        } else {
+            // First time loading file fallback matrix structure assembly
+            executeManualCloudSyncHandshake();
         }
     }
 
@@ -639,7 +569,6 @@
     }
 
     function navigateHistory(direction) {
-        if (isInspectionActive) { alert("⚠️ Cannot browse history while an active inspection route is open."); return; }
         if (localCacheHistory.length === 0) { alert("📋 No logs discovered in database yet."); return; }
         
         if (currentViewerIndex === -1) { 
@@ -655,7 +584,7 @@
         
         if (currentViewerIndex >= localCacheHistory.length) { 
             currentViewerIndex = localCacheHistory.length - 1; 
-            alert("⏮️ Reached oldest historical data data block."); 
+            alert("⏮️ Reached oldest historical data block."); 
             return; 
         }
 
@@ -1021,9 +950,17 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
+            
+            // Wipe hardware storage caches completely upon successful data stream completion
             localStorage.removeItem('five_star_active_draft_session'); 
-            localStorage.removeItem('five_star_kiosk_layout_interlock_active');
-            forceSessionShutdownReset(); 
+            
+            document.getElementById('masterForm').reset();
+            let inputs = document.querySelectorAll('input[data-sec]');
+            inputs.forEach(input => {
+                input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
+            });
+            lockSubmissionOnChanges();
+            bootUpOfflineFirstWorkspace();
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
             submitBtn.disabled = false;
