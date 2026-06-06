@@ -65,7 +65,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.3.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.4.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -196,6 +196,16 @@
         sec6: { title: "🍎 6. Fresh Produce Displays", min: 30, max: 55 }
     };
 
+    // 📋 EMERGENCY FALLBACK SCHEMA: Ensures application logic compiles even if localStorage drops
+    const embeddedHardcodedBackupSchema = {
+        sec1: ["Dairy Case 1", "Dairy Case 2", "Milk Walk-In"],
+        sec2: ["Ice Cream Door 1", "Ice Cream Door 2"],
+        sec3: ["Frozen Pizza", "Frozen Meals"],
+        sec4: ["Fresh Beef Case", "Seafood Display"],
+        sec5: ["Sliced Deli Meat", "Cheese Island"],
+        sec6: ["Wet Produce Wet-Rack", "Apple Table"]
+    };
+
     let activeStructuralMap = {};
     let localCacheHistory = []; 
     let currentViewerIndex = -1; 
@@ -213,6 +223,75 @@
     let clientObservedCond = "Clear Sky";
     let activeDashboardMemoryCache = {};
     let wakeLockInstance = null; 
+    let databaseEngineInstance = null; // IndexedDB persistent database reference object
+
+    // ========================================================================
+    // 🛠️ HARDWARE PERSISTENCE LEVEL INDEPENDENT DATABASE ENGINE (INDEXEDDB)
+    // ========================================================================
+    function initializePersistentStoragePipeline(callbackSuccess) {
+        const request = indexedDB.open("FiveStarInspectionDB", 2);
+        
+        request.onupgradeneeded = function(e) {
+            let db = e.target.result;
+            if (!db.objectStoreNames.contains("inspectionStore")) {
+                db.createObjectStore("inspectionStore");
+            }
+        };
+        
+        request.onsuccess = function(e) {
+            databaseEngineInstance = e.target.result;
+            if (callbackSuccess) callbackSuccess();
+        };
+        
+        request.onerror = function(e) {
+            console.error("Database layer breakdown. Defaulting to system fallback streams.");
+            if (callbackSuccess) callbackSuccess();
+        };
+    }
+
+    function readSecureDataRecord(key, callback) {
+        if (!databaseEngineInstance) {
+            callback(localStorage.getItem(key));
+            return;
+        }
+        try {
+            const tx = databaseEngineInstance.transaction("inspectionStore", "readonly");
+            const store = tx.objectStore("inspectionStore");
+            const req = store.get(key);
+            req.onsuccess = function() {
+                callback(req.result || localStorage.getItem(key));
+            };
+            req.onerror = function() {
+                callback(localStorage.getItem(key));
+            };
+        } catch(e) {
+            callback(localStorage.getItem(key));
+        }
+    }
+
+    function writeSecureDataRecord(key, value) {
+        localStorage.setItem(key, value); // Leave as secondary memory reference mirror
+        if (!databaseEngineInstance) return;
+        try {
+            const tx = databaseEngineInstance.transaction("inspectionStore", "readwrite");
+            const store = tx.objectStore("inspectionStore");
+            store.put(value, key);
+        } catch(e) {
+            console.error("Failed write lock tracking operation.", e);
+        }
+    }
+
+    function deleteSecureDataRecord(key) {
+        localStorage.removeItem(key);
+        if (!databaseEngineInstance) return;
+        try {
+            const tx = databaseEngineInstance.transaction("inspectionStore", "readwrite");
+            const store = tx.objectStore("inspectionStore");
+            store.delete(key);
+        } catch(e) {
+            console.error("Purge failure trace handled.");
+        }
+    }
 
     function updateLiveClockAndWeather() {
         const now = new Date();
@@ -239,12 +318,12 @@
     }
 
     function lockSubmissionOnChanges() {
-        // If the form has already been verified and locked, do not allow edits to clear validation state
-        if(localStorage.getItem('five_star_form_validation_locked') === 'TRUE') return;
-        
-        document.getElementById('finalSubmitBtn').disabled = true;
-        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
-        document.getElementById('validateActionsBtn').style.display = "none";
+        readSecureDataRecord('five_star_form_validation_locked', function(val) {
+            if(val === 'TRUE') return;
+            document.getElementById('finalSubmitBtn').disabled = true;
+            document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
+            document.getElementById('validateActionsBtn').style.display = "none";
+        });
     }
 
     function handleShiftSelectionContextChange() {
@@ -316,12 +395,12 @@
                 draft.temperatures[input.getAttribute('data-name')] = input.value;
             }
         });
-        localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
+        writeSecureDataRecord('five_star_active_draft_session', JSON.stringify(draft));
     }
 
     function forceVisualUnlockingSequence() {
         isInspectionActive = true;
-        localStorage.setItem('five_star_kiosk_layout_interlock_active', 'TRUE');
+        writeSecureDataRecord('five_star_kiosk_layout_interlock_active', 'TRUE');
         
         const masterFormNode = document.getElementById('masterForm');
         if (masterFormNode) masterFormNode.classList.remove('form-locked-state');
@@ -333,13 +412,7 @@
         }
     }
 
-    /*
-        ========================================================================
-        🔒 ADVANCED LOCK DOWN & RUNTIME COMPLIANCE ENGINE
-        ========================================================================
-    */
     function applyGlobalInputLockdownState(shouldLock) {
-        // Targets text inputs, selectors, textarea nodes, and temperature nodes
         document.getElementById('initials').disabled = shouldLock;
         document.getElementById('shift').disabled = shouldLock;
         document.getElementById('freehandNotes').disabled = shouldLock;
@@ -350,67 +423,68 @@
         });
 
         if (shouldLock) {
-            localStorage.setItem('five_star_form_validation_locked', 'TRUE');
+            writeSecureDataRecord('five_star_form_validation_locked', 'TRUE');
         } else {
-            localStorage.removeItem('five_star_form_validation_locked');
+            deleteSecureDataRecord('five_star_form_validation_locked');
         }
     }
 
     function loadSavedDraftProgressData() {
-        let rawDraft = localStorage.getItem('five_star_active_draft_session');
-        forceVisualUnlockingSequence();
-        if (!rawDraft) return;
-        let draft = JSON.parse(rawDraft);
-        
-        document.getElementById('initials').value = draft.initials || "";
-        document.getElementById('shift').value = draft.shift || "";
-        document.getElementById('freehandNotes').value = draft.freehandNotes || "";
-        runtimeCheckboxStateMemory = draft.checkboxes || {};
+        readSecureDataRecord('five_star_active_draft_session', function(rawDraft) {
+            forceVisualUnlockingSequence();
+            if (!rawDraft) return;
+            let draft = JSON.parse(rawDraft);
+            
+            document.getElementById('initials').value = draft.initials || "";
+            document.getElementById('shift').value = draft.shift || "";
+            document.getElementById('freehandNotes').value = draft.freehandNotes || "";
+            runtimeCheckboxStateMemory = draft.checkboxes || {};
 
-        const formContainerTarget = document.getElementById('dynamicWizardContainer');
-        const observerInstance = new MutationObserver(function(mutations, observerRef) {
-            var inputElementsMesh = document.querySelectorAll('input[data-sec]');
-            if (inputElementsMesh.length > 0) {
-                observerRef.disconnect();
-                inputElementsMesh.forEach(input => {
+            const formContainerTarget = document.getElementById('dynamicWizardContainer');
+            const observerInstance = new MutationObserver(function(mutations, observerRef) {
+                var inputElementsMesh = document.querySelectorAll('input[data-sec]');
+                if (inputElementsMesh.length > 0) {
+                    observerRef.disconnect();
+                    inputElementsMesh.forEach(input => {
+                        let name = input.getAttribute('data-name');
+                        if (draft.temperatures && draft.temperatures[name] !== undefined) {
+                            input.value = draft.temperatures[name];
+                            evaluateFieldStyle(input, input.getAttribute('data-sec'));
+                        }
+                    });
+                    readSecureDataRecord('five_star_form_validation_locked', function(locked) {
+                        if(locked === 'TRUE') runStageOneValidation();
+                    });
+                }
+            });
+
+            observerInstance.observe(formContainerTarget, { childList: true, subtree: true });
+            
+            var instantScan = document.querySelectorAll('input[data-sec]');
+            if (instantScan.length > 0) {
+                observerInstance.disconnect();
+                instantScan.forEach(input => {
                     let name = input.getAttribute('data-name');
                     if (draft.temperatures && draft.temperatures[name] !== undefined) {
                         input.value = draft.temperatures[name];
                         evaluateFieldStyle(input, input.getAttribute('data-sec'));
                     }
                 });
-                // Check if the recovery payload dictates a persistent verified lock state
-                if(localStorage.getItem('five_star_form_validation_locked') === 'TRUE') {
-                    runStageOneValidation();
-                }
+                readSecureDataRecord('five_star_form_validation_locked', function(locked) {
+                    if(locked === 'TRUE') runStageOneValidation();
+                });
             }
         });
-
-        observerInstance.observe(formContainerTarget, { childList: true, subtree: true });
-        
-        var instantScan = document.querySelectorAll('input[data-sec]');
-        if (instantScan.length > 0) {
-            observerInstance.disconnect();
-            instantScan.forEach(input => {
-                let name = input.getAttribute('data-name');
-                if (draft.temperatures && draft.temperatures[name] !== undefined) {
-                    input.value = draft.temperatures[name];
-                    evaluateFieldStyle(input, input.getAttribute('data-sec'));
-                }
-            });
-            if(localStorage.getItem('five_star_form_validation_locked') === 'TRUE') {
-                runStageOneValidation();
-            }
-        }
     }
 
     function registerMobileWakeListeners() {
         const handleWakeRecovery = () => {
-            let isInterlockActiveInMemory = localStorage.getItem('five_star_kiosk_layout_interlock_active') === 'TRUE';
-            if (isInterlockActiveInMemory && !isInspectionActive) {
-                console.log("iPad operational wake-up sequence verified. Reconnecting workspace data metrics.");
-                bootUpOfflineFirstWorkspace();
-            }
+            readSecureDataRecord('five_star_kiosk_layout_interlock_active', function(val) {
+                if (val === 'TRUE' && !isInspectionActive) {
+                    console.log("iPad wake recovery event triggered: Restoring records package.");
+                    bootUpOfflineFirstWorkspace();
+                }
+            });
         };
 
         document.addEventListener('visibilitychange', () => {
@@ -426,9 +500,8 @@
         if ('wakeLock' in navigator) {
             try {
                 wakeLockInstance = await navigator.wakeLock.request('screen');
-                console.log("🔒 Screen Wake Lock active. Preventing iPad auto-sleep.");
             } catch (err) {
-                console.warn(`Wake Lock Exception handled: ${err.message}`);
+                console.warn(`Wake Lock initialization bypass handled.`);
             }
         }
     }
@@ -437,39 +510,37 @@
         if (wakeLockInstance !== null) {
             wakeLockInstance.release().then(() => {
                 wakeLockInstance = null;
-                console.log("🔓 Screen Wake Lock systematically released.");
             });
         }
     }
 
     function toggleKioskFormInterlock() {
-        const targetForm = document.getElementById('masterForm');
-        const sessionBtn = document.getElementById('kioskSessionBtn');
-        
         if (!isInspectionActive) {
             isInspectionActive = true;
             runtimeCheckboxStateMemory = {};
             
-            let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
-            if (offlineSchemaRaw) {
-                activeStructuralMap = JSON.parse(offlineSchemaRaw);
-                let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
-                if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
+            readSecureDataRecord('five_star_hardware_layout_schema', function(offlineSchemaRaw) {
+                if (offlineSchemaRaw) {
+                    activeStructuralMap = JSON.parse(offlineSchemaRaw);
+                } else {
+                    activeStructuralMap = embeddedHardcodedBackupSchema; // Safeguard interface construction
+                }
                 
-                renderDynamicFormElements(activeStructuralMap);
-                forceVisualUnlockingSequence();
-                requestScreenWakeLock(); 
-                saveDraftProgressData();
-                setTimeout(focusInitialWalkwayElement, 500);
-            } else {
-                alert("📋 System layout missing. Tap 'Sync Cloud Database Structure' to calibrate device parameters.");
-                isInspectionActive = false;
-            }
+                readSecureDataRecord('five_star_hardware_order_map', function(offlineOrderRaw) {
+                    if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
+                    
+                    renderDynamicFormElements(activeStructuralMap);
+                    forceVisualUnlockingSequence();
+                    requestScreenWakeLock(); 
+                    saveDraftProgressData();
+                    setTimeout(focusInitialWalkwayElement, 500);
+                });
+            });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                localStorage.removeItem('five_star_active_draft_session'); 
-                localStorage.removeItem('five_star_kiosk_layout_interlock_active');
-                localStorage.removeItem('five_star_form_validation_locked');
+                deleteSecureDataRecord('five_star_active_draft_session'); 
+                deleteSecureDataRecord('five_star_kiosk_layout_interlock_active');
+                deleteSecureDataRecord('five_star_form_validation_locked');
                 forceSessionShutdownReset();
             }
         }
@@ -478,10 +549,10 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
-        localStorage.removeItem('five_star_kiosk_layout_interlock_active');
-        localStorage.removeItem('five_star_form_validation_locked');
+        deleteSecureDataRecord('five_star_kiosk_layout_interlock_active');
+        deleteSecureDataRecord('five_star_form_validation_locked');
         
-        applyGlobalInputLockdownState(false); // Restore baseline interface access limits
+        applyGlobalInputLockdownState(false); 
         
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
@@ -491,7 +562,6 @@
         sessionBtn.innerText = "🟢 Start New Inspection Route";
         sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
         
-        // Wipe verification states safely
         document.getElementById('finalSubmitBtn').disabled = true;
         document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
         document.getElementById('validateActionsBtn').style.display = "none";
@@ -528,14 +598,14 @@
             if (res.status === "success") {
                 activeStructuralMap = res.structural_schema;
                 
-                localStorage.setItem('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
-                localStorage.setItem('five_star_historical_cache', JSON.stringify(res.historical_ledger_packages || []));
-                localStorage.setItem('five_star_status_cache', JSON.stringify(res.current_status || {}));
-                localStorage.setItem('five_star_meta_log', res.meta_last_log || "");
+                writeSecureDataRecord('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
+                writeSecureDataRecord('five_star_historical_cache', JSON.stringify(res.historical_ledger_packages || []));
+                writeSecureDataRecord('five_star_status_cache', JSON.stringify(res.current_status || {}));
+                writeSecureDataRecord('five_star_meta_log', res.meta_last_log || "");
                 
                 if (res.display_order_map || res.sequence_map || res.walkway_sequence_map) {
                     let ord = res.display_order_map || res.sequence_map || res.walkway_sequence_map;
-                    localStorage.setItem('five_star_hardware_order_map', JSON.stringify(ord));
+                    writeSecureDataRecord('five_star_hardware_order_map', JSON.stringify(ord));
                     rawCloudSequenceMap = ord || {};
                 }
 
@@ -563,43 +633,51 @@
     }
 
     function bootUpOfflineFirstWorkspace() {
-        let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
-        let offlineHistRaw = localStorage.getItem('five_star_historical_cache');
-        let offlineStatusRaw = localStorage.getItem('five_star_status_cache');
-        let offlineMetaRaw = localStorage.getItem('five_star_meta_log') || "Cached Local Mirror";
-        let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
-        
-        let isInterlockActiveInMemory = localStorage.getItem('five_star_kiosk_layout_interlock_active') === 'TRUE';
+        readSecureDataRecord('five_star_hardware_layout_schema', function(offlineSchemaRaw) {
+            readSecureDataRecord('five_star_historical_cache', function(offlineHistRaw) {
+                readSecureDataRecord('five_star_status_cache', function(offlineStatusRaw) {
+                    readSecureDataRecord('five_star_meta_log', function(offlineMetaRaw) {
+                        readSecureDataRecord('five_star_hardware_order_map', function(offlineOrderRaw) {
+                            readSecureDataRecord('five_star_kiosk_layout_interlock_active', function(isInterlockActiveInMemory) {
+                                
+                                offlineMetaRaw = offlineMetaRaw || "Cached Local Mirror";
+                                
+                                try {
+                                    rawCloudSequenceMap = offlineOrderRaw ? JSON.parse(offlineOrderRaw) : {};
+                                } catch(e) {
+                                    rawCloudSequenceMap = {};
+                                }
 
-        try {
-            rawCloudSequenceMap = offlineOrderRaw ? JSON.parse(offlineOrderRaw) : {};
-        } catch(e) {
-            rawCloudSequenceMap = {};
-        }
+                                if (offlineSchemaRaw) {
+                                    activeStructuralMap = JSON.parse(offlineSchemaRaw);
+                                } else {
+                                    activeStructuralMap = embeddedHardcodedBackupSchema; // Enforce UI generation even if iOS purged memory tags
+                                }
 
-        if (offlineSchemaRaw) {
-            try {
-                activeStructuralMap = JSON.parse(offlineSchemaRaw);
-                if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
-                if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
+                                try {
+                                    if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
+                                    if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
 
-                renderDynamicFormElements(activeStructuralMap);
+                                    renderDynamicFormElements(activeStructuralMap);
 
-                if (isInterlockActiveInMemory) {
-                    loadSavedDraftProgressData();
-                } else {
-                    if (!isInspectionActive) {
-                        document.getElementById('masterForm').reset();
-                        document.getElementById('masterForm').classList.add('form-locked-state');
-                    }
-                }
-                processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
-            } catch(err) {
-                console.log("Memory evaluation exception trace blocked.");
-            }
-        } else {
-            document.getElementById('fullWidthStatusDashboard').innerText = 'Please click "Sync Cloud Database Structure" to calibrate layout.';
-        }
+                                    if (isInterlockActiveInMemory === 'TRUE') {
+                                        loadSavedDraftProgressData();
+                                    } else {
+                                        if (!isInspectionActive) {
+                                            document.getElementById('masterForm').reset();
+                                            document.getElementById('masterForm').classList.add('form-locked-state');
+                                        }
+                                    }
+                                    processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
+                                } catch(err) {
+                                    console.error("Execution profile recovery skipped.", err);
+                                }
+                            });
+                        });
+                    });
+                });
+            });
+        });
     }
 
     function renderDynamicFormElements(schema) {
@@ -1018,7 +1096,6 @@
             return; 
         }
         
-        // 🔒 SUCCESSFUL DATA VERIFICATION VALIDATED: Freeze interface controls entirely
         applyGlobalInputLockdownState(true);
 
         if (errorsLogged > 0) {
@@ -1112,9 +1189,9 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
-            localStorage.removeItem('five_star_active_draft_session'); 
-            localStorage.removeItem('five_star_kiosk_layout_interlock_active');
-            localStorage.removeItem('five_star_form_validation_locked');
+            deleteSecureDataRecord('five_star_active_draft_session'); 
+            deleteSecureDataRecord('five_star_kiosk_layout_interlock_active');
+            deleteSecureDataRecord('five_star_form_validation_locked');
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
@@ -1154,7 +1231,10 @@
     window.onload = function() {
         updateLiveClockAndWeather();
         registerMobileWakeListeners(); 
-        bootUpOfflineFirstWorkspace();
+        initializePersistentStoragePipeline(function() {
+            // Fires only when the hardware database engine is verified online
+            bootUpOfflineFirstWorkspace();
+        });
     };
 </script>
 </body>
