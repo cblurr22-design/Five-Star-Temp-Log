@@ -269,7 +269,7 @@
 
     /*
        ========================================================================
-       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM Core
+       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM Core (FIXED NON-DESTRUCTIVE)
        ========================================================================
     */
     function handleShiftSelectionContextChange() {
@@ -293,8 +293,11 @@
                             input.value = priorTemperatureValue;
                             evaluateFieldStyle(input, sectionId);
                         } else {
-                            input.value = "";
-                            evaluateFieldStyle(input, sectionId);
+                            // Clear out only previously failed assets so they can be re-logged
+                            if (input.value === priorTemperatureValue.toString() || input.value === "") {
+                                input.value = "";
+                                evaluateFieldStyle(input, sectionId);
+                            }
                         }
                     }
                 } else {
@@ -302,8 +305,12 @@
                     evaluateFieldStyle(input, sectionId);
                 }
             } else {
-                input.value = "";
-                evaluateFieldStyle(input, sectionId);
+                // BUG FIX: Only wipe input boxes on a standard shift switch if they were filled by an active Recheck loop template
+                if (input.hasAttribute('data-autofilled-recheck') || input.value === "") {
+                    input.value = "";
+                    input.removeAttribute('data-autofilled-recheck');
+                    evaluateFieldStyle(input, sectionId);
+                }
             }
         });
         
@@ -337,10 +344,16 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
+    /*
+       ========================================================================
+       🛡️ REINFORCED COLD-BOOT DRAFT RESTORATION MODULE (FIXED TIMEOUTS)
+       ========================================================================
+    */
     function loadSavedDraftProgressData() {
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
         if (!rawDraft) return;
         let draft = JSON.parse(rawDraft);
+        
         isInspectionActive = true;
         clearInterval(backgroundRefreshPollerId);
         
@@ -351,7 +364,7 @@
         
         document.querySelectorAll('input[data-sec]').forEach(input => {
             let name = input.getAttribute('data-name');
-            if (draft.temperatures[name] !== undefined) {
+            if (draft.temperatures && draft.temperatures[name] !== undefined) {
                 input.value = draft.temperatures[name];
                 evaluateFieldStyle(input, input.getAttribute('data-sec'));
             }
@@ -413,6 +426,9 @@
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         
+        // Remove structural form elements explicitly to prevent residual visual anomalies
+        document.getElementById('dynamicWizardContainer').innerHTML = '';
+        
         const sessionBtn = document.getElementById('kioskSessionBtn');
         sessionBtn.innerText = "🟢 Start New Inspection Route";
         sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
@@ -442,7 +458,7 @@
     }
 
     function pullSystemStructure() {
-        fetch(cloudSpreadsheetURL)
+        return fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
@@ -452,10 +468,15 @@
                 else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                 
-                if (!isInspectionActive) { renderDynamicFormElements(res.structural_schema); }
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
+                // Render elements if no active walk is structurally holding input streams open
+                if (!isInspectionActive) { 
+                    renderDynamicFormElements(res.structural_schema); 
+                }
+                
+                // ASYNCHRONOUS COLD-BOOT CHECK: Recover active walk data elements if iPad dropped out from a screen timeout
                 if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
                     renderDynamicFormElements(res.structural_schema);
                     loadSavedDraftProgressData();
@@ -599,20 +620,17 @@
         if (isInspectionActive) { alert("⚠️ Cannot browse history while an active inspection route is open."); return; }
         if (localCacheHistory.length === 0) { alert("📋 No logs discovered in database yet."); return; }
         
-        // Step chronologically backwards to older blocks, or forwards to newer blocks
         if (currentViewerIndex === -1) { 
             currentViewerIndex = 0; 
         } else { 
             currentViewerIndex = currentViewerIndex - direction; 
         }
 
-        // Forward Boundary: If navigating past the newest entry, return cleanly to live feed
         if (currentViewerIndex < 0) { 
             jumpToLiveStream(); 
             return; 
         }
         
-        // Backward Boundary: If navigating past the oldest entry, keep focus locked on it
         if (currentViewerIndex >= localCacheHistory.length) { 
             currentViewerIndex = localCacheHistory.length - 1; 
             alert("⏮️ Reached oldest historical data data block."); 
