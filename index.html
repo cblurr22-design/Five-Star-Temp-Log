@@ -269,7 +269,7 @@
 
     /*
        ========================================================================
-       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM
+       🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM (FIXED SHIFT SELECTION SAVE)
        ========================================================================
     */
     function handleShiftSelectionContextChange() {
@@ -304,6 +304,7 @@
                     evaluateFieldStyle(input, sectionId);
                 }
             } else {
+                // FIXED: Changing shift after writing numbers preserves manual typing entirely
                 if (input.hasAttribute('data-autofilled-recheck')) {
                     input.value = "";
                     input.removeAttribute('data-autofilled-recheck');
@@ -346,7 +347,7 @@
 
     /*
        ========================================================================
-       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (TIMEOUT & SLEEP IMMUNE)
+       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (LOCK-SCREEN TIMEOUT IMMUNE)
        ========================================================================
     */
     function loadSavedDraftProgressData() {
@@ -413,6 +414,7 @@
             });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
+                // FIXED: Purge local cache draft data ONLY when explicitly clicking confirmation warning
                 localStorage.removeItem('five_star_active_draft_session'); 
                 forceSessionShutdownReset();
             }
@@ -422,7 +424,6 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
-        localStorage.removeItem('five_star_active_draft_session');
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         document.getElementById('dynamicWizardContainer').innerHTML = '';
@@ -456,6 +457,7 @@
     }
 
     function pullSystemStructure() {
+        // Enforce sequential execution gates so structure builds before restoration runs
         return fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
@@ -469,6 +471,7 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
+                // ASYNCHRONOUS COLD-BOOT CHECK: Automatically re-open walk view if cached session memory is found on wake
                 if (localStorage.getItem('five_star_active_draft_session')) {
                     isInspectionActive = true;
                     renderDynamicFormElements(res.structural_schema);
@@ -757,7 +760,6 @@
                 }
             }
             
-            // 📉 OPTIMIZATION POINT: Slice down the chart viewport package array from 100 entries to 30 entries max
             if (labelsTimeline.length > 30) {
                 labelsTimeline = labelsTimeline.slice(-30);
                 dataPointsPlot = dataPointsPlot.slice(-30);
@@ -997,6 +999,8 @@
             })
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
+            // Explicitly clear local draft memory ONLY when successfully pushed to the master database
+            localStorage.removeItem('five_star_active_draft_session'); 
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
