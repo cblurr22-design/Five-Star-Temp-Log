@@ -65,7 +65,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.4.0 Build</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v2.4.1 Bulk</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -230,7 +230,7 @@
                 if (code === 0) clientObservedCond = "Clear Sky";
                 else if (code <= 3) clientObservedCond = "Partly Cloudy";
                 else if (code <= 65) clientObservedCond = "Rain Showers";
-                else clientOuterCond = "Overcast";
+                else clientObservedCond = "Overcast";
                 
                 if (currentViewerIndex === -1) {
                     const weatherViewNode = document.getElementById('dashboardWeatherView');
@@ -313,7 +313,6 @@
         }
     }
 
-    // 🎯 REWRITING THE FILE snapshot block with each keystroke entry
     function saveDraftProgressData() {
         if (!isInspectionActive) return;
         let draft = {
@@ -327,7 +326,7 @@
             draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
-        localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); // Anchor active route tag
+        localStorage.setItem('five_star_operator_route_running_flag', 'TRUE'); 
     }
 
     function loadSavedDraftProgressData() {
@@ -366,7 +365,7 @@
             .then(res => res.json())
             .then(res => {
                 if (res.status === "success") {
-                    activeStructuralMap = res.status === "success" ? res.structural_schema : {};
+                    activeStructuralMap = res.structural_schema;
                     localStorage.setItem('five_star_structural_schema_backup', JSON.stringify(res.structural_schema));
                     
                     if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
@@ -376,8 +375,14 @@
                     localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                     
                     renderDynamicFormElements(res.structural_schema);
-                    if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                    if (res.current_status) activeDashboardMemoryCache = res.current_status;
+                    if (res.historical_ledger_packages) {
+                        localCacheHistory = res.historical_ledger_packages;
+                        localStorage.setItem('five_star_historical_ledger_backup', JSON.stringify(res.historical_ledger_packages));
+                    }
+                    if (res.current_status) {
+                        activeDashboardMemoryCache = res.current_status;
+                        localStorage.setItem('five_star_current_status_backup', JSON.stringify(res.current_status));
+                    }
                     
                     targetForm.classList.remove('form-locked-state');
                     sessionBtn.innerText = "🛑 Cancel & Reset Route";
@@ -433,55 +438,59 @@
         }, 30000); 
     }
 
-    /*
-       ========================================================================
-       🛡️ THE REPAIR HANDSHAKE: Offline structure builds instantly on reload
-       ========================================================================
-    */
     function pullSystemStructure() {
         let isRouteOpenOnHardware = localStorage.getItem('five_star_operator_route_running_flag') === 'TRUE';
         let offlineSchemaRaw = localStorage.getItem('five_star_structural_schema_backup');
         let offlineOrdersRaw = localStorage.getItem('five_star_hardware_order_backup');
+        let offlineHistoryRaw = localStorage.getItem('five_star_historical_ledger_backup');
+        let offlineStatusRaw = localStorage.getItem('five_star_current_status_backup');
+        let offlineMetaRaw = localStorage.getItem('five_star_meta_log_backup') || "Local Profile Active";
 
-        // 🛑 STEP 1: If mid-inspection, build form fields instantly from local storage memory baseline
-        if (isRouteOpenOnHardware && offlineSchemaRaw) {
-            isInspectionActive = true;
+        // 🛡️ STEP 1: Core Offline Build. Restores historical matrix memory anchors safely on wake
+        if (offlineSchemaRaw) {
             activeStructuralMap = JSON.parse(offlineSchemaRaw);
             rawCloudSequenceMap = offlineOrdersRaw ? JSON.parse(offlineOrdersRaw) : {};
+            if (offlineHistoryRaw) localCacheHistory = JSON.parse(offlineHistoryRaw);
+            if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
             
-            // Rebuild grid architecture locally before hitting network pipelines
-            renderDynamicFormElements(activeStructuralMap, function() {
-                loadSavedDraftProgressData();
-                const targetForm = document.getElementById('masterForm');
-                const sessionBtn = document.getElementById('kioskSessionBtn');
-                if (targetForm) targetForm.classList.remove('form-locked-state');
-                if (sessionBtn) {
-                    sessionBtn.innerText = "🛑 Cancel & Reset Route";
-                    sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
-                }
-            });
-        } else if (offlineSchemaRaw) {
-            activeStructuralMap = JSON.parse(offlineSchemaRaw);
-            rawCloudSequenceMap = offlineOrdersRaw ? JSON.parse(offlineOrdersRaw) : {};
-            if (!isInspectionActive) { renderDynamicFormElements(activeStructuralMap); }
+            if (isRouteOpenOnHardware) {
+                isInspectionActive = true;
+                renderDynamicFormElements(activeStructuralMap, function() {
+                    loadSavedDraftProgressData();
+                    const targetForm = document.getElementById('masterForm');
+                    const sessionBtn = document.getElementById('kioskSessionBtn');
+                    if (targetForm) targetForm.classList.remove('form-locked-state');
+                    if (sessionBtn) {
+                        sessionBtn.innerText = "🛑 Cancel & Reset Route";
+                        sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+                    }
+                });
+            } else {
+                if (!isInspectionActive) { renderDynamicFormElements(activeStructuralMap); }
+            }
+            if (currentViewerIndex === -1) processDashboardViewUpdate(activeDashboardMemoryCache, false, offlineMetaRaw);
         }
 
-        // STEP 2: Network fetch execution profiles metrics charts without resetting open fields
+        // STEP 2: Background Ledger Sync. Feeds analytical chart lines without mutating active text inputs
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 localStorage.setItem('five_star_structural_schema_backup', JSON.stringify(res.structural_schema));
+                localStorage.setItem('five_star_historical_ledger_backup', JSON.stringify(res.historical_ledger_packages || []));
+                localStorage.setItem('five_star_current_status_backup', JSON.stringify(res.current_status || {}));
+                localStorage.setItem('five_star_meta_log_backup', res.meta_last_log || "");
+                
+                activeStructuralMap = res.structural_schema;
+                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
+                if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
                 if (res.display_order_map) rawCloudSequenceMap = res.display_order_map;
                 else if (res.sequence_map) rawCloudSequenceMap = res.sequence_map;
                 else if (res.walkway_sequence_map) rawCloudSequenceMap = res.walkway_sequence_map;
                 localStorage.setItem('five_star_hardware_order_backup', JSON.stringify(rawCloudSequenceMap));
                 
-                if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
-                if (res.current_status) activeDashboardMemoryCache = res.current_status;
-                
-                // Hard-lock barrier: Server responses are completely blocked from erasing input cells mid-route!
+                // Hard network barrier blocks network updates from erasing dynamic elements
                 if (!isInspectionActive && !isRouteOpenOnHardware) { 
                     renderDynamicFormElements(res.structural_schema); 
                 }
@@ -489,7 +498,7 @@
                 if (currentViewerIndex === -1) processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
             }
         }).catch(err => {
-            console.log("Operating locally via device flash profile layers.");
+            console.log("Operating securely from local hardware disk image profiles.");
         });
     }
 
@@ -522,7 +531,6 @@
 
         rebuildDynamicCloudSequenceArray();
 
-        // Execution fence checks painted state context prior to firing input population loops
         if (typeof layoutCompletionCallback === "function") {
             layoutCompletionCallback();
         }
@@ -769,7 +777,7 @@
             localStorage.removeItem('five_star_operator_route_running_flag');
             forceSessionShutdownReset(); 
         }).catch(err => {
-            alert("⚠️ Connection Timeout.");
+            alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
             submitBtn.disabled = false;
             submitBtn.innerText = "🔒 Complete Log & Submit to Sheet";
         });
