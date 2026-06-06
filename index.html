@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Five Star Refrigeration Check System</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -33,6 +35,7 @@
         .custom-yellow-notes-badge { background-color: #ffc107 !important; color: #000000 !important; font-weight: 700 !important; border: 2px solid #000000 !important; }
         .history-nav-btn { padding: 2px 10px; font-size: 13px; font-weight: bold; border-radius: 4px; }
         .live-indicator { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-locked-state { opacity: 0.4; pointer-events: none; }
         .alert-item-container { scroll-margin-top: 80px; padding: 6px; border-radius: 4px; transition: background-color 0.3s; }
         .weather-meta-text { font-size: 11px; font-weight: bold; color: #0d6efd; display: block; margin-top: 2px; }
         
@@ -62,13 +65,12 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v8.2.0 (Zero-Reset Build)</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.2.2</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
 
-    <!-- Live Status Dashboard Card Grid -->
     <div class="card p-4 mb-4">
         <div class="d-flex justify-content-between align-items-baseline border-bottom pb-2 mb-3">
             <div class="d-flex align-items-center gap-3">
@@ -86,10 +88,9 @@
                 <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6 mt-2" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Loaded</span>
             </div>
         </div>
-        <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard metrics.</div>
+        <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard lights parameters.</div>
     </div>
 
-    <!-- Manager Asset Console -->
     <div class="card p-3 mb-4 bg-light border-warning">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="text-dark fw-bold mb-0">⚙️ Manager Asset Governance Console</h5>
@@ -124,16 +125,15 @@
         </div>
     </div>
 
-    <!-- Digital Input Worksheet Panel Area -->
     <div class="row">
         <div class="col-12 col-lg-7">
             <div class="card p-4 shadow-sm border-primary" style="border-width: 2px;">
                 <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
                     <h4 class="text-secondary mb-0">📝 Digital Floor Log Sheet</h4>
-                    <button type="button" onclick="executeManualClearDiscard()" class="btn btn-outline-danger fw-bold btn-sm px-3 shadow-sm">🗑️ Reset Active Grid Values</button>
+                    <button type="button" id="kioskSessionBtn" onclick="toggleKioskFormInterlock()" class="btn btn-success fw-bold px-4 shadow-sm">🟢 Start New Inspection Route</button>
                 </div>
                 
-                <form id="masterForm" novalidate>
+                <form id="masterForm" class="form-locked-state" novalidate>
                     <div class="row mb-4 bg-light p-3 rounded border">
                         <div class="col-6">
                             <label class="form-label fw-bold">Inspector Initials</label>
@@ -199,6 +199,7 @@
     let activeStructuralMap = {};
     let localCacheHistory = []; 
     let currentViewerIndex = -1; 
+    let isInspectionActive = false;
     let runtimeCheckboxStateMemory = {};
     let globalChartInstanceReference = null; 
     
@@ -211,6 +212,7 @@
     let clientObservedTemp = "72°F";
     let clientObservedCond = "Clear Sky";
     let activeDashboardMemoryCache = {};
+    let wakeLockInstance = null; // 🔒 iPad Device Wake Lock Container Reference
 
     function updateLiveClockAndWeather() {
         const now = new Date();
@@ -298,6 +300,7 @@
     }
 
     function saveDraftProgressData() {
+        if (!isInspectionActive) return;
         let draft = {
             initials: document.getElementById('initials').value,
             shift: document.getElementById('shift').value,
@@ -314,12 +317,27 @@
     }
 
     /*
-       ========================================================================
-       🛡️ SAFE EXCEPTION HYDRATION (TIMING GAP IMMUNE)
-       ========================================================================
+        ========================================================================
+        🛡️ REINFORCED INTERLOCK STATE RESTORATION ENGINE (v6.2.2 iOS SLEEP RECOVERY)
+        ========================================================================
     */
+    function forceVisualUnlockingSequence() {
+        isInspectionActive = true;
+        localStorage.setItem('five_star_kiosk_layout_interlock_active', 'TRUE');
+        
+        const masterFormNode = document.getElementById('masterForm');
+        if (masterFormNode) masterFormNode.classList.remove('form-locked-state');
+        
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        if (sessionBtn) {
+            sessionBtn.innerText = "🛑 Cancel & Reset Route";
+            sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+        }
+    }
+
     function loadSavedDraftProgressData() {
         let rawDraft = localStorage.getItem('five_star_active_draft_session');
+        forceVisualUnlockingSequence();
         if (!rawDraft) return;
         let draft = JSON.parse(rawDraft);
         
@@ -328,29 +346,123 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
 
-        var liveInputsOnFloorMesh = document.querySelectorAll('input[data-sec]');
-        if (liveInputsOnFloorMesh.length > 0) {
-            liveInputsOnFloorMesh.forEach(input => {
+        const formContainerTarget = document.getElementById('dynamicWizardContainer');
+        const observerInstance = new MutationObserver(function(mutations, observerRef) {
+            var inputElementsMesh = document.querySelectorAll('input[data-sec]');
+            if (inputElementsMesh.length > 0) {
+                observerRef.disconnect();
+                inputElementsMesh.forEach(input => {
+                    let name = input.getAttribute('data-name');
+                    if (draft.temperatures && draft.temperatures[name] !== undefined) {
+                        input.value = draft.temperatures[name];
+                        evaluateFieldStyle(input, input.getAttribute('data-sec'));
+                    }
+                });
+            }
+        });
+
+        observerInstance.observe(formContainerTarget, { childList: true, subtree: true });
+        
+        var instantScan = document.querySelectorAll('input[data-sec]');
+        if (instantScan.length > 0) {
+            observerInstance.disconnect();
+            instantScan.forEach(input => {
                 let name = input.getAttribute('data-name');
                 if (draft.temperatures && draft.temperatures[name] !== undefined) {
                     input.value = draft.temperatures[name];
-                    input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
-                    input.classList.add(determineStatusClass(parseFloat(input.value), limitsSchema[input.getAttribute('data-sec')]));
+                    evaluateFieldStyle(input, input.getAttribute('data-sec'));
                 }
             });
         }
     }
 
-    function executeManualClearDiscard() {
-        if (confirm("Clear all currently typed temperatures and notes from the active device?")) {
-            localStorage.removeItem('five_star_active_draft_session');
-            document.getElementById('masterForm').reset();
-            let inputs = document.querySelectorAll('input[data-sec]');
-            inputs.forEach(input => {
-                input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
-            });
-            lockSubmissionOnChanges();
+    // 📱 MOBILE SYSTEM EVENT WAKE/RESTORE PIPELINE
+    function registerMobileWakeListeners() {
+        const handleWakeRecovery = () => {
+            let isInterlockActiveInMemory = localStorage.getItem('five_star_kiosk_layout_interlock_active') === 'TRUE';
+            if (isInterlockActiveInMemory && !isInspectionActive) {
+                console.log("iPad operational wake-up sequence verified. Reconnecting workspace data metrics.");
+                bootUpOfflineFirstWorkspace();
+            }
+        };
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') { handleWakeRecovery(); }
+        });
+
+        window.addEventListener('pageshow', (event) => {
+            handleWakeRecovery();
+        });
+    }
+
+    // 🔒 SCREEN WAKE LOCK API EXECUTION SYSTEM
+    async function requestScreenWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                wakeLockInstance = await navigator.wakeLock.request('screen');
+                console.log("🔒 Screen Wake Lock active. Preventing iPad auto-sleep.");
+            } catch (err) {
+                console.warn(`Wake Lock Exception handled: ${err.message}`);
+            }
         }
+    }
+
+    function releaseScreenWakeLock() {
+        if (wakeLockInstance !== null) {
+            wakeLockInstance.release().then(() => {
+                wakeLockInstance = null;
+                console.log("🔓 Screen Wake Lock systematically released.");
+            });
+        }
+    }
+
+    function toggleKioskFormInterlock() {
+        const targetForm = document.getElementById('masterForm');
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        
+        if (!isInspectionActive) {
+            isInspectionActive = true;
+            runtimeCheckboxStateMemory = {};
+            
+            let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
+            if (offlineSchemaRaw) {
+                activeStructuralMap = JSON.parse(offlineSchemaRaw);
+                let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
+                if (offlineOrderRaw) rawCloudSequenceMap = JSON.parse(offlineOrderRaw);
+                
+                renderDynamicFormElements(activeStructuralMap);
+                forceVisualUnlockingSequence();
+                requestScreenWakeLock(); // <-- Initialize Wake Lock on route opening
+                saveDraftProgressData();
+                setTimeout(focusInitialWalkwayElement, 500);
+            } else {
+                alert("📋 System layout missing. Tap 'Sync Cloud Database Structure' to calibrate device parameters.");
+                isInspectionActive = false;
+            }
+        } else {
+            if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
+                localStorage.removeItem('five_star_active_draft_session'); 
+                localStorage.removeItem('five_star_kiosk_layout_interlock_active');
+                forceSessionShutdownReset();
+            }
+        }
+    }
+
+    function forceSessionShutdownReset() {
+        isInspectionActive = false;
+        runtimeCheckboxStateMemory = {};
+        localStorage.removeItem('five_star_kiosk_layout_interlock_active');
+        document.getElementById('masterForm').reset();
+        document.getElementById('masterForm').classList.add('form-locked-state');
+        document.getElementById('dynamicWizardContainer').innerHTML = '';
+        
+        const sessionBtn = document.getElementById('kioskSessionBtn');
+        sessionBtn.innerText = "🟢 Start New Inspection Route";
+        sessionBtn.className = "btn btn-success fw-bold px-4 shadow-sm";
+        
+        lockSubmissionOnChanges();
+        releaseScreenWakeLock(); // <-- Release Wake Lock on route exit
+        bootUpOfflineFirstWorkspace();
     }
 
     function executeManualCloudSyncHandshake() {
@@ -395,9 +507,11 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                renderDynamicFormElements(res.structural_schema, function() {
-                    loadSavedDraftProgressData();
-                });
+                if (!isInspectionActive) {
+                    renderDynamicFormElements(res.structural_schema);
+                } else {
+                    rebuildDynamicCloudSequenceArray();
+                }
                 
                 processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
                 syncBtn.innerText = "✅ Sync Complete";
@@ -419,8 +533,9 @@
         let offlineStatusRaw = localStorage.getItem('five_star_status_cache');
         let offlineMetaRaw = localStorage.getItem('five_star_meta_log') || "Cached Local Mirror";
         let offlineOrderRaw = localStorage.getItem('five_star_hardware_order_map');
+        
+        let isInterlockActiveInMemory = localStorage.getItem('five_star_kiosk_layout_interlock_active') === 'TRUE';
 
-        // 🚨 Shield Array Null Allocations: Protect sorting arrays from throwing execution errors on wake
         try {
             rawCloudSequenceMap = offlineOrderRaw ? JSON.parse(offlineOrderRaw) : {};
         } catch(e) {
@@ -433,20 +548,26 @@
                 if (offlineHistRaw) localCacheHistory = JSON.parse(offlineHistRaw);
                 if (offlineStatusRaw) activeDashboardMemoryCache = JSON.parse(offlineStatusRaw);
 
-                renderDynamicFormElements(activeStructuralMap, function() {
+                renderDynamicFormElements(activeStructuralMap);
+
+                if (isInterlockActiveInMemory) {
                     loadSavedDraftProgressData();
-                });
+                } else {
+                    if (!isInspectionActive) {
+                        document.getElementById('masterForm').reset();
+                        document.getElementById('masterForm').classList.add('form-locked-state');
+                    }
+                }
                 processDashboardViewUpdate(activeDashboardMemoryCache, true, offlineMetaRaw);
             } catch(err) {
-                console.log("Cached storage read error occurred. Standing down profile parameters.");
+                console.log("Memory evaluation exception trace blocked.");
             }
         } else {
-            // 🛑 REMOVED NETWORK REBOOT FALLBACK: App stays 100% silent on wake and will never refresh the layout space automatically
-            document.getElementById('fullWidthStatusDashboard').innerText = 'Please click "Sync Cloud Database Structure" to download your store equipment maps for the first time.';
+            document.getElementById('fullWidthStatusDashboard').innerText = 'Please click "Sync Cloud Database Structure" to calibrate layout.';
         }
     }
 
-    function renderDynamicFormElements(schema, layoutCompletionCallback) {
+    function renderDynamicFormElements(schema) {
         if (!schema) return;
         const container = document.getElementById('dynamicWizardContainer');
         container.innerHTML = '';
@@ -475,10 +596,6 @@
         }
 
         rebuildDynamicCloudSequenceArray();
-
-        if (typeof layoutCompletionCallback === "function") {
-            layoutCompletionCallback();
-        }
     }
 
     function rebuildDynamicCloudSequenceArray() {
@@ -490,8 +607,6 @@
             calculatedSequenceArray.sort((a, b) => {
                 let nameA = a.getAttribute('data-name');
                 let nameB = b.getAttribute('data-name');
-                
-                // Hardcoded fallback checks ensure missing keys map cleanly instead of breaking loops
                 let rawOrderA = sortMap[nameA] !== undefined ? sortMap[nameA] : 9999;
                 let rawOrderB = sortMap[nameB] !== undefined ? sortMap[nameB] : 9999;
                 
@@ -507,11 +622,13 @@
             input.removeEventListener('focus', handleWalkwayFocusHighlighter);
             input.removeEventListener('blur', handleWalkwayBlurClearer);
             input.removeEventListener('input', handleNativeInputOverride);
+            input.removeEventListener('blur', saveDraftProgressData); // Anti-duplicate removal
             
             input.addEventListener('keydown', handleWalkwayKeyboardInterration);
             input.addEventListener('focus', handleWalkwayFocusHighlighter);
             input.addEventListener('blur', handleWalkwayBlurClearer);
             input.addEventListener('input', handleNativeInputOverride);
+            input.addEventListener('blur', saveDraftProgressData); // 🛡️ Saves state instantly if focus drops on tablet sleep
         });
     }
 
@@ -573,6 +690,7 @@
     }
 
     function navigateHistory(direction) {
+        if (isInspectionActive) { alert("⚠️ Cannot browse history while an active inspection route is open."); return; }
         if (localCacheHistory.length === 0) { alert("📋 No logs discovered in database yet."); return; }
         
         if (currentViewerIndex === -1) { 
@@ -603,8 +721,8 @@
     function jumpToLiveStream() {
         currentViewerIndex = -1;
         const modeInd = document.getElementById('dashboardModeIndicator');
-        modeInd.innerText = "● Local Mode";
-        modeInd.className = "badge bg-success live-indicator";
+        document.getElementById('dashboardModeIndicator').innerText = "● Local Mode";
+        document.getElementById('dashboardModeIndicator').className = "badge bg-success live-indicator";
         bootUpOfflineFirstWorkspace();
     }
 
@@ -958,13 +1076,8 @@
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
             localStorage.removeItem('five_star_active_draft_session'); 
-            document.getElementById('masterForm').reset();
-            let inputs = document.querySelectorAll('input[data-sec]');
-            inputs.forEach(input => {
-                input.classList.remove('status-green', 'status-yellow', 'status-red', 'field-error');
-            });
-            lockSubmissionOnChanges();
-            bootUpOfflineFirstWorkspace();
+            localStorage.removeItem('five_star_kiosk_layout_interlock_active');
+            forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
             submitBtn.disabled = false;
@@ -1002,6 +1115,7 @@
 
     window.onload = function() {
         updateLiveClockAndWeather();
+        registerMobileWakeListeners(); // 📱 Activates native lock recovery layer
         bootUpOfflineFirstWorkspace();
     };
 </script>
