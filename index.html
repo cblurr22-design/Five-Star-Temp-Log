@@ -67,7 +67,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.2</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -321,38 +321,82 @@
         }
     }
 
-    function saveDraftProgressData() {
-        if (!isInspectionActive) return;
+    const ACTIVE_DRAFT_STORAGE_KEY = 'five_star_active_draft_session';
+    const ACTIVE_DRAFT_BACKUP_KEY = 'five_star_active_draft_session_backup';
+    let draftAutosaveIntervalId = null;
+    let isDraftBeingRestored = false;
+
+    function safelyWriteDraftToStorage(serializedDraft) {
+        try { localStorage.setItem(ACTIVE_DRAFT_STORAGE_KEY, serializedDraft); } catch (err) { console.warn('Primary draft save failed.', err); }
+        try { sessionStorage.setItem(ACTIVE_DRAFT_BACKUP_KEY, serializedDraft); } catch (err) { console.warn('Backup draft save failed.', err); }
+    }
+
+    function safelyReadDraftFromStorage() {
+        let rawDraft = null;
+        try { rawDraft = localStorage.getItem(ACTIVE_DRAFT_STORAGE_KEY); } catch (err) { console.warn('Primary draft read failed.', err); }
+        if (!rawDraft) {
+            try { rawDraft = sessionStorage.getItem(ACTIVE_DRAFT_BACKUP_KEY); } catch (err) { console.warn('Backup draft read failed.', err); }
+        }
+        return rawDraft;
+    }
+
+    function clearSavedDraftProgressData() {
+        try { localStorage.removeItem(ACTIVE_DRAFT_STORAGE_KEY); } catch (err) {}
+        try { sessionStorage.removeItem(ACTIVE_DRAFT_BACKUP_KEY); } catch (err) {}
+    }
+
+    function saveDraftProgressData(forceSave) {
+        if (!isInspectionActive && forceSave !== true) return;
+        if (isDraftBeingRestored) return;
+
+        const initialsNode = document.getElementById('initials');
+        const shiftNode = document.getElementById('shift');
+        const notesNode = document.getElementById('freehandNotes');
+
         let draft = {
-            initials: document.getElementById('initials').value,
-            shift: document.getElementById('shift').value,
-            freehandNotes: document.getElementById('freehandNotes').value,
+            inspection_active: isInspectionActive,
+            initials: initialsNode ? initialsNode.value : "",
+            shift: shiftNode ? shiftNode.value : "",
+            freehandNotes: notesNode ? notesNode.value : "",
             temperatures: {},
-            checkboxes: runtimeCheckboxStateMemory,
+            checkboxes: runtimeCheckboxStateMemory || {},
             saved_at: new Date().toISOString()
         };
+
         document.querySelectorAll('input[data-sec]').forEach(input => {
             draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
-        localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
+
+        safelyWriteDraftToStorage(JSON.stringify(draft));
     }
 
-    // Extra iPad/Safari safety: save immediately before the browser sleeps, locks, hides, or unloads.
+    // Heavy-duty iPad/Safari protection: save on every practical event plus a steady heartbeat.
     function installIPadDraftSafetyAutosave() {
-        document.addEventListener("input", saveDraftProgressData, true);
-        document.addEventListener("change", saveDraftProgressData, true);
-        document.addEventListener("blur", saveDraftProgressData, true);
+        const eventsThatMeanUserChangedSomething = [
+            'beforeinput', 'input', 'keyup', 'change', 'focusout', 'blur', 'touchend', 'pointerup', 'mouseup'
+        ];
 
-        document.addEventListener("visibilitychange", function () {
-            if (document.hidden) saveDraftProgressData();
+        eventsThatMeanUserChangedSomething.forEach(eventName => {
+            document.addEventListener(eventName, function () {
+                saveDraftProgressData();
+            }, true);
         });
 
-        window.addEventListener("pagehide", saveDraftProgressData);
-        window.addEventListener("beforeunload", saveDraftProgressData);
+        document.addEventListener('visibilitychange', function () {
+            saveDraftProgressData(true);
+        });
+
+        window.addEventListener('pagehide', function () { saveDraftProgressData(true); });
+        window.addEventListener('beforeunload', function () { saveDraftProgressData(true); });
+
+        clearInterval(draftAutosaveIntervalId);
+        draftAutosaveIntervalId = setInterval(function () {
+            saveDraftProgressData();
+        }, 1000);
     }
 
     function loadSavedDraftProgressData() {
-        let rawDraft = localStorage.getItem('five_star_active_draft_session');
+        let rawDraft = safelyReadDraftFromStorage();
         if (!rawDraft) return;
 
         let draft;
@@ -360,10 +404,11 @@
             draft = JSON.parse(rawDraft);
         } catch (err) {
             console.warn("Saved draft was corrupted and has been cleared.", err);
-            localStorage.removeItem('five_star_active_draft_session');
+            clearSavedDraftProgressData();
             return;
         }
 
+        isDraftBeingRestored = true;
         isInspectionActive = true;
         clearInterval(backgroundRefreshPollerId);
         
@@ -384,6 +429,8 @@
         const sessionBtn = document.getElementById('kioskSessionBtn');
         sessionBtn.innerText = "🛑 Cancel & Reset Route";
         sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
+        isDraftBeingRestored = false;
+        saveDraftProgressData(true);
     }
 
     function toggleKioskFormInterlock() {
@@ -423,7 +470,7 @@
             });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                localStorage.removeItem('five_star_active_draft_session'); 
+                clearSavedDraftProgressData(); 
                 forceSessionShutdownReset();
             }
         }
@@ -432,7 +479,7 @@
     function forceSessionShutdownReset() {
         isInspectionActive = false;
         runtimeCheckboxStateMemory = {};
-        localStorage.removeItem('five_star_active_draft_session');
+        clearSavedDraftProgressData();
         document.getElementById('masterForm').reset();
         document.getElementById('masterForm').classList.add('form-locked-state');
         
@@ -479,7 +526,7 @@
                 if (res.historical_ledger_packages) localCacheHistory = res.historical_ledger_packages;
                 if (res.current_status) activeDashboardMemoryCache = res.current_status;
                 
-                if (localStorage.getItem('five_star_active_draft_session') && !isInspectionActive) {
+                if (safelyReadDraftFromStorage() && !isInspectionActive) {
                     renderDynamicFormElements(res.structural_schema);
                     loadSavedDraftProgressData();
                 }
