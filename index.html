@@ -65,7 +65,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v6.0.0 (On-Demand Sync Fixed)</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-primary fs-6 align-middle ms-2">v6.1.1</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -88,7 +88,7 @@
                 <span class="badge custom-yellow-notes-badge text-wrap text-start fs-6 mt-2" style="display: inline-block; word-break: break-word;" id="dashboardNotesView">Notes: None Loaded</span>
             </div>
         </div>
-        <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate the dashboard metrics for the first time.</div>
+        <div class="dashboard-grid" id="fullWidthStatusDashboard">Please press "Sync Cloud Database Structure" to populate dashboard lights parameters.</div>
     </div>
 
     <div class="card p-3 mb-4 bg-light border-warning">
@@ -185,6 +185,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    // 🚨 FIXED GLOBAL DEPLOYMENT LINK CONFIGURATION TARGET
+    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbwzuacLcc1hszemBVo3S-hWtfP57tSx7ZpKlyWFOBrE8DMjXtiDgdCfLToFFQqqUJyH/exec";
+
     const limitsSchema = {
         sec1: { title: "🥛 1. Dairy / Refrigerated", min: 28.5, max: 40 },
         sec2: { title: "🍦 2. Ice Cream / Frozen", min: -15, max: 10 },
@@ -209,7 +212,6 @@
 
     let clientObservedTemp = "72°F";
     let clientObservedCond = "Clear Sky";
-    
     let activeDashboardMemoryCache = {};
 
     function updateLiveClockAndWeather() {
@@ -355,7 +357,6 @@
             isInspectionActive = true;
             runtimeCheckboxStateMemory = {};
             
-            // Build the form completely offline instantly using local hardware storage profile map
             let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
             if (offlineSchemaRaw) {
                 activeStructuralMap = JSON.parse(offlineSchemaRaw);
@@ -369,7 +370,7 @@
                 saveDraftProgressData();
                 setTimeout(focusInitialWalkwayElement, 500);
             } else {
-                alert("📋 System layout data missing in internal hardware cache. Please click 'Sync Cloud Database Structure' to calibrate device.");
+                alert("📋 System layout missing. Tap 'Sync Cloud Database Structure' to calibrate device parameters.");
                 isInspectionActive = false;
             }
         } else {
@@ -395,17 +396,11 @@
         bootUpOfflineFirstWorkspace();
     }
 
-    /*
-       ========================================================================
-       🔄 MANUAL ON-DEMAND SYNC Link (CRITICAL ENGINE OVERRIDE)
-       ========================================================================
-    */
     function executeManualCloudSyncHandshake() {
         const syncBtn = document.getElementById('manualCloudSyncBtn');
         syncBtn.innerText = "⏳ Connecting to Cloud Stream...";
         syncBtn.disabled = true;
 
-        // Fetch local Knox weather metrics on call execution 
         fetch('https://api.open-meteo.com/v1/forecast?latitude=41.2959&longitude=-86.6222&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
         .then(res => res.json())
         .then(data => {
@@ -418,16 +413,17 @@
                 else if (code <= 65) clientObservedCond = "Rain Showers";
                 else clientObservedCond = "Overcast";
             }
-        }).catch(() => {});
+        }).catch(() => {
+            clientObservedTemp = "72°F";
+            clientObservedCond = "Clear Sky";
+        });
 
-        // Fetch master layout updates from the cloud spreadsheet context links
         fetch(cloudSpreadsheetURL)
         .then(res => res.json())
         .then(res => {
             if (res.status === "success") {
                 activeStructuralMap = res.structural_schema;
                 
-                // Write copies to local safety cache storage hardware partitions
                 localStorage.setItem('five_star_hardware_layout_schema', JSON.stringify(res.structural_schema));
                 localStorage.setItem('five_star_historical_cache', JSON.stringify(res.historical_ledger_packages || []));
                 localStorage.setItem('five_star_status_cache', JSON.stringify(res.current_status || {}));
@@ -444,6 +440,8 @@
                 
                 if (!isInspectionActive) {
                     renderDynamicFormElements(res.structural_schema);
+                } else {
+                    rebuildDynamicCloudSequenceArray();
                 }
                 
                 processDashboardViewUpdate(res.current_status, true, res.meta_last_log);
@@ -454,17 +452,12 @@
                 }, 2000);
             }
         }).catch(err => {
-            alert("⚠️ Connection Timeout. Google Sheet backend unreachable over store Wi-Fi network link.");
+            alert("⚠️ Sync Timeout. Spreadsheet web application unreachable over Wi-Fi framework lines.");
             syncBtn.innerText = "🔄 Sync Cloud Database Structure";
             syncBtn.disabled = false;
         });
     }
 
-    /*
-       ========================================================================
-       🛡️ PURE OFFLINE BOOTSTRAP PROTOCOL
-       ========================================================================
-    */
     function bootUpOfflineFirstWorkspace() {
         let offlineSchemaRaw = localStorage.getItem('five_star_hardware_layout_schema');
         let offlineHistRaw = localStorage.getItem('five_star_historical_cache');
@@ -530,23 +523,19 @@
             calculatedSequenceArray.sort((a, b) => {
                 let nameA = a.getAttribute('data-name');
                 let nameB = b.getAttribute('data-name');
-                
-                let rawOrderA = 9999;
-                let rawOrderB = 9999;
+                let rawOrderA = 9999; let rawOrderB = 9999;
                 
                 if (rawCloudSequenceMap[nameA] !== undefined) rawOrderA = rawCloudSequenceMap[nameA];
                 if (rawCloudSequenceMap[nameB] !== undefined) rawOrderB = rawCloudSequenceMap[nameB];
                 
                 let orderA = (rawOrderA === "" || rawOrderA === null || isNaN(parseFloat(rawOrderA))) ? 9999 : parseFloat(rawOrderA);
                 let orderB = (rawOrderB === "" || rawOrderB === null || isNaN(parseFloat(rawOrderB))) ? 9999 : parseFloat(rawOrderB);
-                
                 return orderA - orderB;
             });
         }
 
         calculatedSequenceArray.forEach((input, index) => {
             input.setAttribute('data-walk-index', index);
-            
             input.removeEventListener('keydown', handleWalkwayKeyboardInterration);
             input.removeEventListener('focus', handleWalkwayFocusHighlighter);
             input.removeEventListener('blur', handleWalkwayBlurClearer);
@@ -563,6 +552,7 @@
         evaluateFieldStyle(e.target, e.target.getAttribute('data-sec'));
     }
 
+    // Explicitly focus initial equipment node on checklist initialization sequence paths
     function focusInitialWalkwayElement() {
         if (calculatedSequenceArray.length > 0) {
             calculatedSequenceArray[0].focus();
@@ -1000,8 +990,6 @@
         }).then(() => {
             alert("🚀 Log secure-synced to spreadsheet records!");
             localStorage.removeItem('five_star_active_draft_session'); 
-            
-            // Recheck safety baseline cleanup loop targets
             forceSessionShutdownReset(); 
         }).catch(err => {
             alert("⚠️ Connection Timeout. Retrying transmission link pipeline...");
@@ -1034,15 +1022,12 @@
             document.getElementById('mgmtCoolerName').value = '';
             document.getElementById('mgmtPlacementOrder').value = '';
             document.getElementById('mgmtAuthCode').value = '';
-            
-            // Execute manual sync override cascade to update elements dynamically on panel registration shifts
             executeManualCloudSyncHandshake();
         });
     }
 
     window.onload = function() {
         updateLiveClockAndWeather();
-        // Fire clean offline boot parameter scan checks immediately on window load triggers
         bootUpOfflineFirstWorkspace();
     };
 </script>
