@@ -63,7 +63,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-secondary fs-6 align-middle ms-2">v3.2.0</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-secondary fs-6 align-middle ms-2">v3.3.0</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Trend Diagnostics</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -261,12 +261,6 @@
         lockSubmissionOnChanges();
     }
 
-    function lockSubmissionOnChanges() {
-        document.getElementById('finalSubmitBtn').disabled = true;
-        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
-        document.getElementById('validateActionsBtn').style.display = "none";
-    }
-
     /*
        ========================================================================
        🎯 SMART AUTOMATIC INTERPOLATION ALGORITHM
@@ -344,9 +338,15 @@
         localStorage.setItem('five_star_active_draft_session', JSON.stringify(draft));
     }
 
+    function lockSubmissionOnChanges() {
+        document.getElementById('finalSubmitBtn').disabled = true;
+        document.getElementById('finalSubmitBtn').classList.replace('btn-success', 'btn-secondary');
+        document.getElementById('validateActionsBtn').style.display = "none";
+    }
+
     /*
        ========================================================================
-       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION
+       🛡️ REINFORCED CHRONOLOGICAL DRAFT RESTORATION (HARD SLEEP IMMUNE)
        ========================================================================
     */
     function forceVisualUnlockingSequence() {
@@ -375,15 +375,24 @@
         document.getElementById('freehandNotes').value = draft.freehandNotes || "";
         runtimeCheckboxStateMemory = draft.checkboxes || {};
         
-        setTimeout(() => {
-            document.querySelectorAll('input[data-sec]').forEach(input => {
-                let name = input.getAttribute('data-name');
-                if (draft.temperatures && draft.temperatures[name] !== undefined) {
-                    input.value = draft.temperatures[name];
-                    evaluateFieldStyle(input, input.getAttribute('data-sec'));
-                }
-            });
-        }, 150); 
+        // 🚀 CRITICAL FIX: Loop evaluation uses a safe text field scanning interval to allow iOS to complete painting the input boxes
+        var hydrationAttemptsCount = 0;
+        var structuralHydrationTimer = setInterval(function() {
+            var liveInputsOnFloorMesh = document.querySelectorAll('input[data-sec]');
+            hydrationAttemptsCount++;
+            
+            if (liveInputsOnFloorMesh.length > 0 || hydrationAttemptsCount > 20) {
+                clearInterval(structuralHydrationTimer);
+                
+                liveInputsOnFloorMesh.forEach(input => {
+                    let name = input.getAttribute('data-name');
+                    if (draft.temperatures && draft.temperatures[name] !== undefined) {
+                        input.value = draft.temperatures[name];
+                        evaluateFieldStyle(input, input.getAttribute('data-sec'));
+                    }
+                });
+            }
+        }, 50);
     }
 
     function toggleKioskFormInterlock() {
@@ -465,6 +474,7 @@
     }
 
     function pullSystemStructure() {
+        // 🎯 BOOTSTRAP PASSTHROUGH GATEWAY: Instantly lock UI in active layout state before network lag hits, stopping start-screen flicker on wake
         if (localStorage.getItem('five_star_active_draft_session')) {
             forceVisualUnlockingSequence();
         }
@@ -622,11 +632,6 @@
         saveDraftProgressData(); 
     }
 
-    /*
-       ========================================================================
-       ⏮️ RE-ALIGNED CHRONOLOGICAL HISTORY NAVIGATION ENGINE
-       ========================================================================
-    */
     function navigateHistory(direction) {
         if (isInspectionActive) { alert("⚠️ Cannot browse history while an active inspection route is open."); return; }
         if (localCacheHistory.length === 0) { alert("📋 No logs discovered in database yet."); return; }
