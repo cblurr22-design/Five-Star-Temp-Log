@@ -67,7 +67,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.3</span></h2>
+            <h2 class="mb-0">Five Star Refrigeration Engine <span class="badge bg-success fs-6 align-middle ms-2">v1.3.4</span></h2>
             <small>Dynamic Self-Assembling Interface Layout Module with iPad Safe Manual Refresh</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
@@ -324,32 +324,129 @@
 
     const ACTIVE_DRAFT_STORAGE_KEY = 'five_star_active_draft_session';
     const ACTIVE_DRAFT_BACKUP_KEY = 'five_star_active_draft_session_backup';
+    const ACTIVE_DRAFT_LOCAL_BACKUP_KEY = 'five_star_active_draft_session_local_backup';
+    const ACTIVE_DRAFT_DB_NAME = 'FiveStarRefrigerationDraftDB';
+    const ACTIVE_DRAFT_DB_STORE = 'drafts';
+    const ACTIVE_DRAFT_DB_RECORD_ID = 'active_inspection_draft';
     let draftAutosaveIntervalId = null;
     let isDraftBeingRestored = false;
+    let pendingDraftPayloadFromIndexedDB = null;
+
+    function openDraftDatabase() {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) {
+                reject(new Error('IndexedDB is not available on this browser.'));
+                return;
+            }
+
+            const request = indexedDB.open(ACTIVE_DRAFT_DB_NAME, 1);
+
+            request.onupgradeneeded = function (event) {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(ACTIVE_DRAFT_DB_STORE)) {
+                    db.createObjectStore(ACTIVE_DRAFT_DB_STORE, { keyPath: 'id' });
+                }
+            };
+
+            request.onsuccess = function () { resolve(request.result); };
+            request.onerror = function () { reject(request.error); };
+        });
+    }
+
+    function writeDraftToIndexedDB(serializedDraft) {
+        openDraftDatabase().then(db => {
+            const transaction = db.transaction(ACTIVE_DRAFT_DB_STORE, 'readwrite');
+            transaction.objectStore(ACTIVE_DRAFT_DB_STORE).put({
+                id: ACTIVE_DRAFT_DB_RECORD_ID,
+                payload: serializedDraft,
+                saved_at: new Date().toISOString()
+            });
+            transaction.oncomplete = function () { db.close(); };
+            transaction.onerror = function () { console.warn('IndexedDB draft save failed.', transaction.error); db.close(); };
+        }).catch(err => console.warn('IndexedDB draft unavailable.', err));
+    }
+
+    function readDraftFromIndexedDB() {
+        return openDraftDatabase().then(db => {
+            return new Promise((resolve) => {
+                const transaction = db.transaction(ACTIVE_DRAFT_DB_STORE, 'readonly');
+                const request = transaction.objectStore(ACTIVE_DRAFT_DB_STORE).get(ACTIVE_DRAFT_DB_RECORD_ID);
+
+                request.onsuccess = function () {
+                    db.close();
+                    resolve(request.result && request.result.payload ? request.result.payload : null);
+                };
+
+                request.onerror = function () {
+                    console.warn('IndexedDB draft read failed.', request.error);
+                    db.close();
+                    resolve(null);
+                };
+            });
+        }).catch(err => {
+            console.warn('IndexedDB draft read unavailable.', err);
+            return null;
+        });
+    }
+
+    function clearDraftFromIndexedDB() {
+        openDraftDatabase().then(db => {
+            const transaction = db.transaction(ACTIVE_DRAFT_DB_STORE, 'readwrite');
+            transaction.objectStore(ACTIVE_DRAFT_DB_STORE).delete(ACTIVE_DRAFT_DB_RECORD_ID);
+            transaction.oncomplete = function () { db.close(); };
+            transaction.onerror = function () { db.close(); };
+        }).catch(() => {});
+    }
 
     function safelyWriteDraftToStorage(serializedDraft) {
         try { localStorage.setItem(ACTIVE_DRAFT_STORAGE_KEY, serializedDraft); } catch (err) { console.warn('Primary draft save failed.', err); }
-        try { sessionStorage.setItem(ACTIVE_DRAFT_BACKUP_KEY, serializedDraft); } catch (err) { console.warn('Backup draft save failed.', err); }
+        try { localStorage.setItem(ACTIVE_DRAFT_LOCAL_BACKUP_KEY, serializedDraft); } catch (err) { console.warn('Local backup draft save failed.', err); }
+        try { sessionStorage.setItem(ACTIVE_DRAFT_BACKUP_KEY, serializedDraft); } catch (err) { console.warn('Session backup draft save failed.', err); }
+        writeDraftToIndexedDB(serializedDraft);
     }
 
-    function safelyReadDraftFromStorage() {
+    function safelyReadDraftFromFastStorage() {
         let rawDraft = null;
         try { rawDraft = localStorage.getItem(ACTIVE_DRAFT_STORAGE_KEY); } catch (err) { console.warn('Primary draft read failed.', err); }
         if (!rawDraft) {
-            try { rawDraft = sessionStorage.getItem(ACTIVE_DRAFT_BACKUP_KEY); } catch (err) { console.warn('Backup draft read failed.', err); }
+            try { rawDraft = localStorage.getItem(ACTIVE_DRAFT_LOCAL_BACKUP_KEY); } catch (err) { console.warn('Local backup draft read failed.', err); }
+        }
+        if (!rawDraft) {
+            try { rawDraft = sessionStorage.getItem(ACTIVE_DRAFT_BACKUP_KEY); } catch (err) { console.warn('Session backup draft read failed.', err); }
         }
         return rawDraft;
     }
 
-    function clearSavedDraftProgressData() {
-        try { localStorage.removeItem(ACTIVE_DRAFT_STORAGE_KEY); } catch (err) {}
-        try { sessionStorage.removeItem(ACTIVE_DRAFT_BACKUP_KEY); } catch (err) {}
+    function safelyReadDraftFromStorage() {
+        return safelyReadDraftFromFastStorage() || pendingDraftPayloadFromIndexedDB;
     }
 
-    function saveDraftProgressData(forceSave) {
-        if (!isInspectionActive && forceSave !== true) return;
-        if (isDraftBeingRestored) return;
+    async function prepareBestSavedDraftBeforeLayoutLoad() {
+        const fastDraft = safelyReadDraftFromFastStorage();
+        if (fastDraft) {
+            pendingDraftPayloadFromIndexedDB = fastDraft;
+            return fastDraft;
+        }
 
+        const indexedDraft = await readDraftFromIndexedDB();
+        if (indexedDraft) {
+            pendingDraftPayloadFromIndexedDB = indexedDraft;
+            // Rehydrate fast storage so future reloads recover immediately.
+            try { localStorage.setItem(ACTIVE_DRAFT_STORAGE_KEY, indexedDraft); } catch (err) {}
+            try { localStorage.setItem(ACTIVE_DRAFT_LOCAL_BACKUP_KEY, indexedDraft); } catch (err) {}
+        }
+        return indexedDraft;
+    }
+
+    function clearSavedDraftProgressData() {
+        try { localStorage.removeItem(ACTIVE_DRAFT_STORAGE_KEY); } catch (err) {}
+        try { localStorage.removeItem(ACTIVE_DRAFT_LOCAL_BACKUP_KEY); } catch (err) {}
+        try { sessionStorage.removeItem(ACTIVE_DRAFT_BACKUP_KEY); } catch (err) {}
+        pendingDraftPayloadFromIndexedDB = null;
+        clearDraftFromIndexedDB();
+    }
+
+    function buildCurrentDraftObject() {
         const initialsNode = document.getElementById('initials');
         const shiftNode = document.getElementById('shift');
         const notesNode = document.getElementById('freehandNotes');
@@ -368,13 +465,37 @@
             draft.temperatures[input.getAttribute('data-name')] = input.value;
         });
 
-        safelyWriteDraftToStorage(JSON.stringify(draft));
+        return draft;
+    }
+
+    function draftHasAnyEnteredData(draft) {
+        if (!draft) return false;
+        if ((draft.initials || '').trim() !== '') return true;
+        if ((draft.shift || '').trim() !== '') return true;
+        if ((draft.freehandNotes || '').trim() !== '') return true;
+        if (draft.temperatures && Object.values(draft.temperatures).some(value => String(value || '').trim() !== '')) return true;
+        if (draft.checkboxes && Object.keys(draft.checkboxes).length > 0) return true;
+        return false;
+    }
+
+    function saveDraftProgressData(forceSave) {
+        if (isDraftBeingRestored) return;
+
+        const draft = buildCurrentDraftObject();
+
+        // iPad lock can flip state during reload. Save whenever there is real entered data,
+        // even if isInspectionActive is temporarily false. Avoid overwriting a good draft with a blank page-load snapshot.
+        if (!isInspectionActive && forceSave !== true && !draftHasAnyEnteredData(draft)) return;
+
+        const serializedDraft = JSON.stringify(draft);
+        pendingDraftPayloadFromIndexedDB = serializedDraft;
+        safelyWriteDraftToStorage(serializedDraft);
     }
 
     // Heavy-duty iPad/Safari protection: save on every practical event plus a steady heartbeat.
     function installIPadDraftSafetyAutosave() {
         const eventsThatMeanUserChangedSomething = [
-            'beforeinput', 'input', 'keyup', 'change', 'focusout', 'blur', 'touchend', 'pointerup', 'mouseup'
+            'beforeinput', 'input', 'keyup', 'change', 'focusout', 'blur', 'touchend', 'pointerup', 'mouseup', 'selectionchange'
         ];
 
         eventsThatMeanUserChangedSomething.forEach(eventName => {
@@ -385,15 +506,16 @@
 
         document.addEventListener('visibilitychange', function () {
             saveDraftProgressData(true);
-        });
+        }, true);
 
         window.addEventListener('pagehide', function () { saveDraftProgressData(true); });
         window.addEventListener('beforeunload', function () { saveDraftProgressData(true); });
+        window.addEventListener('freeze', function () { saveDraftProgressData(true); });
 
         clearInterval(draftAutosaveIntervalId);
         draftAutosaveIntervalId = setInterval(function () {
             saveDraftProgressData();
-        }, 1000);
+        }, 750);
     }
 
     function loadSavedDraftProgressData() {
@@ -412,6 +534,7 @@
         isDraftBeingRestored = true;
         isInspectionActive = true;
         clearInterval(backgroundRefreshPollerId);
+        backgroundRefreshPollerId = null;
         
         document.getElementById('initials').value = draft.initials || "";
         document.getElementById('shift').value = draft.shift || "";
@@ -849,11 +972,11 @@
         });
     }
 
-    function initializeAppWithoutAutomaticWakeRefresh() {
+    async function initializeAppWithoutAutomaticWakeRefresh() {
         installIPadDraftSafetyAutosave();
         startAutomaticDashboardPolling();
 
-        const savedDraft = safelyReadDraftFromStorage();
+        const savedDraft = await prepareBestSavedDraftBeforeLayoutLoad();
 
         if (savedDraft) {
             // iPad/Safari may reload the page after lock. Load the layout once so fields exist,
