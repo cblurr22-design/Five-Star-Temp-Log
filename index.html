@@ -20,9 +20,6 @@
         .dot-green { background-color: #198754; box-shadow: 0 0 6px #198754; }
         .dot-gray { background-color: #6c757d; }
         .section-block { border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; margin-bottom: 15px; background: white; scroll-margin-top: 80px; }
-        .section-confirmed { border-left: 5px solid #198754; background-color: #f8fffb; }
-        .section-has-error { border-left: 5px solid #dc3545; background-color: #fffafd; }
-        .inline-action-box { background-color: #fff; border: 1px solid #dc3545; border-radius: 4px; padding: 12px; margin-top: 10px; }
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
         .dashboard-badge { display: flex; flex-direction: column; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; -webkit-tap-highlight-color: transparent; }
         .dashboard-badge:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important; border-color: #0d6efd; }
@@ -37,15 +34,7 @@
         .form-locked-state { opacity: 0.4; pointer-events: none; }
         .alert-item-container { scroll-margin-top: 80px; padding: 6px; border-radius: 4px; transition: background-color 0.3s; }
         .weather-meta-text { font-size: 11px; font-weight: bold; color: #0d6efd; display: block; margin-top: 2px; }
-
-        .active-walkway-focus {
-            background-color: #e6f2ff !important;
-            border: 2px solid #0d6efd !important;
-            border-radius: 6px;
-            transform: scale(1.01);
-            transition: all 0.2s ease-in-out;
-        }
-
+        .active-walkway-focus { background-color: #e6f2ff !important; border: 2px solid #0d6efd !important; border-radius: 6px; transform: scale(1.01); transition: all 0.2s ease-in-out; }
         .full-screen-fluid-dialog { max-width: 96% !important; margin: 2% auto !important; }
         .fluid-canvas-viewport { position: relative; height: 55vh !important; width: 100% !important; }
 
@@ -66,8 +55,8 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Check System <span class="badge bg-success fs-6 align-middle ms-2">v1.3.2</span></h2>
-            <small>Dynamic Self-Assembling Interface Layout Module with iPad Draft Lock Protection</small>
+            <h2 class="mb-0">Five Star Refrigeration Check System <span class="badge bg-success fs-6 align-middle ms-2">v1.3.3</span></h2>
+            <small>iPad Draft Lock Recovery Test Build</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
@@ -135,7 +124,7 @@
                     <div class="row mb-4 bg-light p-3 rounded border">
                         <div class="col-6">
                             <label class="form-label fw-bold">Inspector Initials</label>
-                            <input type="text" id="initials" class="form-control" placeholder="e.g. RM" oninput="saveDraftProgressData()">
+                            <input type="text" id="initials" class="form-control" placeholder="e.g. RM" oninput="forceSaveDraftNow()">
                         </div>
                         <div class="col-6">
                             <label class="form-label fw-bold">Shift Window</label>
@@ -153,7 +142,7 @@
 
                     <div class="bg-light p-3 rounded border mb-3">
                         <label class="form-label fw-bold text-secondary">📋 Freehand Inspector Shift Notes</label>
-                        <textarea id="freehandNotes" class="form-control" rows="2" placeholder="Enter custom log observations or rack notes..." oninput="saveDraftProgressData()"></textarea>
+                        <textarea id="freehandNotes" class="form-control" rows="2" placeholder="Enter custom log observations or rack notes..." oninput="forceSaveDraftNow()"></textarea>
                     </div>
 
                     <button type="button" id="validateFormBtn" onclick="runStageOneValidation()" class="btn btn-primary w-100 mt-2 py-2 shadow-sm fw-bold fs-5">🔍 Step 1: Validate Floor Sheet</button>
@@ -204,16 +193,12 @@
     let isInspectionActive = false;
     let runtimeCheckboxStateMemory = {};
     let globalChartInstanceReference = null;
-
     let appleGlobalPendingAsset = "";
     let appleGlobalPendingLimits = null;
-
     let rawCloudSequenceMap = {};
     let calculatedSequenceArray = [];
-
     let clientObservedTemp = "72°F";
     let clientObservedCond = "Clear Sky";
-
     let activeDashboardMemoryCache = {};
     let absoluteLastSyncTimestampMemory = Date.now();
 
@@ -243,7 +228,6 @@
                 }
             })
             .catch(() => {
-                console.log("Weather service unreachable. Rolling over to safe local fallbacks.");
                 clientObservedTemp = "72°F";
                 clientObservedCond = "Clear Sky";
             });
@@ -264,7 +248,7 @@
             inputElement.classList.add(determineStatusClass(value, limitsSchema[sectionId]));
         }
 
-        saveDraftProgressData();
+        forceSaveDraftNow();
         lockSubmissionOnChanges();
     }
 
@@ -272,35 +256,51 @@
         const finalSubmitBtn = document.getElementById('finalSubmitBtn');
         const validateActionsBtn = document.getElementById('validateActionsBtn');
 
+        if (!finalSubmitBtn || !validateActionsBtn) return;
+
         finalSubmitBtn.disabled = true;
         finalSubmitBtn.classList.remove('btn-success');
         finalSubmitBtn.classList.add('btn-secondary');
         validateActionsBtn.style.display = "none";
     }
 
-    function hasAnyTemperatureEntry() {
-        return Array.from(document.querySelectorAll('input[data-sec]')).some(input => input.value.trim() !== "");
+    function forceSaveDraftNow() {
+        if (!isInspectionActive && localStorage.getItem(activeSessionKey) !== "true") return;
+
+        isInspectionActive = true;
+        localStorage.setItem(activeSessionKey, "true");
+        saveDraftProgressData();
+    }
+
+    function saveDraftProgressData() {
+        const initialsNode = document.getElementById('initials');
+        const shiftNode = document.getElementById('shift');
+        const notesNode = document.getElementById('freehandNotes');
+
+        if (!initialsNode || !shiftNode || !notesNode) return;
+
+        let draft = {
+            savedAt: new Date().toISOString(),
+            initials: initialsNode.value,
+            shift: shiftNode.value,
+            freehandNotes: notesNode.value,
+            temperatures: {},
+            checkboxes: runtimeCheckboxStateMemory
+        };
+
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            draft.temperatures[input.getAttribute('data-name')] = input.value;
+        });
+
+        localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+        localStorage.setItem(activeSessionKey, "true");
     }
 
     function handleShiftSelectionContextChange() {
-        localStorage.setItem(activeSessionKey, "true");
         isInspectionActive = true;
+        localStorage.setItem(activeSessionKey, "true");
 
         const selectedShiftValue = document.getElementById('shift').value;
-
-        /*
-            IMPORTANT FIX:
-            Changing the shift no longer clears entered temperatures.
-
-            Previous behavior:
-            - Any non-Recheck shift erased every temperature field.
-            - Recheck could also overwrite fields.
-
-            New behavior:
-            - Shift selection saves only the shift.
-            - Existing temperature entries are preserved.
-            - Recheck only fills EMPTY fields with prior GREEN readings.
-        */
 
         if (selectedShiftValue === "Recheck") {
             document.querySelectorAll('input[data-sec]').forEach(input => {
@@ -328,32 +328,6 @@
 
         saveDraftProgressData();
         lockSubmissionOnChanges();
-    }
-
-    function saveDraftProgressData() {
-        if (!isInspectionActive && localStorage.getItem(activeSessionKey) !== "true") return;
-
-        const initialsNode = document.getElementById('initials');
-        const shiftNode = document.getElementById('shift');
-        const notesNode = document.getElementById('freehandNotes');
-
-        if (!initialsNode || !shiftNode || !notesNode) return;
-
-        let draft = {
-            savedAt: new Date().toISOString(),
-            initials: initialsNode.value,
-            shift: shiftNode.value,
-            freehandNotes: notesNode.value,
-            temperatures: {},
-            checkboxes: runtimeCheckboxStateMemory
-        };
-
-        document.querySelectorAll('input[data-sec]').forEach(input => {
-            draft.temperatures[input.getAttribute('data-name')] = input.value;
-        });
-
-        localStorage.setItem(draftStorageKey, JSON.stringify(draft));
-        localStorage.setItem(activeSessionKey, "true");
     }
 
     function loadSavedDraftProgressData() {
@@ -448,7 +422,6 @@
                         sessionBtn.className = "btn btn-danger fw-bold px-4 shadow-sm";
 
                         saveDraftProgressData();
-
                         setTimeout(focusInitialWalkwayElement, 500);
                     }
                 });
@@ -488,7 +461,6 @@
 
             if (!isInspectionActive && currentViewerIndex === -1) {
                 if (rightNow - absoluteLastSyncTimestampMemory >= fifteenMinutesInMilliseconds) {
-                    console.log("15-Minute Milestone reached. Connecting to spreadsheet data stream...");
                     absoluteLastSyncTimestampMemory = rightNow;
                     pullSystemStructure();
                 }
@@ -659,7 +631,7 @@
             runtimeCheckboxStateMemory[coolerKey][val] = cb.checked;
         });
 
-        saveDraftProgressData();
+        forceSaveDraftNow();
     }
 
     function navigateHistory(direction) {
@@ -799,7 +771,7 @@
 
     function transmitLogsToCloud() {
         saveActiveCheckboxesToMemory();
-        saveDraftProgressData();
+        forceSaveDraftNow();
 
         const submitBtn = document.getElementById('finalSubmitBtn');
         submitBtn.disabled = true;
@@ -839,7 +811,7 @@
             alert("⚠️ Connection Timeout. Your draft is still saved on this iPad. Try submitting again.");
             submitBtn.disabled = false;
             submitBtn.innerText = "🔒 Complete Log & Submit to Sheet";
-            saveDraftProgressData();
+            forceSaveDraftNow();
         });
     }
 
@@ -878,23 +850,24 @@
     }
 
     function attachIPadDraftProtectionHandlers() {
+        document.addEventListener("input", forceSaveDraftNow, true);
+        document.addEventListener("change", forceSaveDraftNow, true);
+
         document.addEventListener("visibilitychange", function() {
             if (document.visibilityState === "hidden") {
-                saveDraftProgressData();
+                forceSaveDraftNow();
             }
         });
 
-        window.addEventListener("pagehide", function() {
-            saveDraftProgressData();
-        });
+        window.addEventListener("pagehide", forceSaveDraftNow);
+        window.addEventListener("beforeunload", forceSaveDraftNow);
+        window.addEventListener("blur", forceSaveDraftNow);
 
-        window.addEventListener("beforeunload", function() {
-            saveDraftProgressData();
-        });
-
-        window.addEventListener("blur", function() {
-            saveDraftProgressData();
-        });
+        setInterval(function() {
+            if (isInspectionActive || localStorage.getItem(activeSessionKey) === "true") {
+                forceSaveDraftNow();
+            }
+        }, 3000);
     }
 
     window.onload = function() {
