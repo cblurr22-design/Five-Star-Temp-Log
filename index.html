@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -55,8 +54,8 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center bg-dark text-white p-3 rounded card mb-3">
         <div>
-            <h2 class="mb-0">Five Star Refrigeration Check System <span class="badge bg-success fs-6 align-middle ms-2">v1.3.3</span></h2>
-            <small>iPad Draft Lock Recovery Test Build</small>
+            <h2 class="mb-0">Five Star Refrigeration Check System <span class="badge bg-success fs-6 align-middle ms-2">v1.3.5</span></h2>
+            <small>iPad Local + Config Draft Recovery Build</small>
         </div>
         <span class="badge bg-primary fs-6" id="liveClock"></span>
     </div>
@@ -173,7 +172,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbwzuacLcc1hszemBVo3S-hWtfP57tSx7ZpKlyWFOBrE8DMjXtiDgdCfLToFFQqqUJyH/exec";
+    const cloudSpreadsheetURL = "https://script.google.com/macros/s/AKfycbzrYAYfyquAfZHMFKf-60GiTj8GbTQRa97ujMuWk7kdU7JJxpo4mW4Ds5AMWWRbK0R4/exec";
     const draftStorageKey = "five_star_active_draft_session";
     const activeSessionKey = "five_star_route_active";
 
@@ -388,6 +387,111 @@
         localStorage.removeItem(activeSessionKey);
     }
 
+
+    function getOrCreateDeviceId() {
+        let deviceId = localStorage.getItem("five_star_device_id");
+
+        if (!deviceId) {
+            deviceId = "ipad_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+            localStorage.setItem("five_star_device_id", deviceId);
+        }
+
+        return deviceId;
+    }
+
+    function buildCloudDraftPayload() {
+        let draftPackage = [];
+
+        document.querySelectorAll('input[data-sec]').forEach(input => {
+            draftPackage.push({
+                department: limitsSchema[input.getAttribute('data-sec')] ? limitsSchema[input.getAttribute('data-sec')].title : input.getAttribute('data-sec'),
+                cooler_name: input.getAttribute('data-name'),
+                temperature: input.value,
+                section: input.getAttribute('data-sec')
+            });
+        });
+
+        return {
+            routing_action: "SAVE_CONFIG_DRAFT",
+            device_id: getOrCreateDeviceId(),
+            time: new Date().toLocaleString(),
+            user: document.getElementById('initials').value.toUpperCase(),
+            shift: document.getElementById('shift').value,
+            inspector_notes: document.getElementById('freehandNotes').value,
+            records_package: draftPackage,
+            outdoor_temp: clientObservedTemp,
+            weather_cond: clientObservedCond
+        };
+    }
+
+    function backupDraftToCloud() {
+        if (!isInspectionActive && localStorage.getItem(activeSessionKey) !== "true") return;
+
+        fetch(cloudSpreadsheetURL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(buildCloudDraftPayload())
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status !== "success") {
+                console.log("Config draft backup did not confirm success:", data);
+            }
+        })
+        .catch(() => {
+            console.log("Config draft backup failed. Local draft remains saved.");
+        });
+    }
+
+    function loadDraftFromCloud() {
+        return fetch(cloudSpreadsheetURL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+                routing_action: "LOAD_CONFIG_DRAFT",
+                device_id: getOrCreateDeviceId()
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status !== "success" || !data.draft) return false;
+
+            const cloudDraft = data.draft;
+
+            localStorage.setItem(draftStorageKey, JSON.stringify({
+                savedAt: new Date().toISOString(),
+                initials: cloudDraft.initials || "",
+                shift: cloudDraft.shift || "",
+                freehandNotes: cloudDraft.freehandNotes || "",
+                temperatures: cloudDraft.temperatures || {},
+                checkboxes: {}
+            }));
+
+            localStorage.setItem(activeSessionKey, "true");
+            isInspectionActive = true;
+
+            return true;
+        })
+        .catch(() => {
+            console.log("No Config draft restored.");
+            return false;
+        });
+    }
+
+    function clearCloudDraft() {
+        return fetch(cloudSpreadsheetURL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+                routing_action: "CLEAR_CONFIG_DRAFT",
+                device_id: getOrCreateDeviceId()
+            })
+        })
+        .catch(() => {
+            console.log("Config draft clear failed, but final submission was already attempted.");
+        });
+    }
+
     function toggleKioskFormInterlock() {
         const targetForm = document.getElementById('masterForm');
         const sessionBtn = document.getElementById('kioskSessionBtn');
@@ -427,8 +531,10 @@
                 });
         } else {
             if (confirm("Are you sure you want to cancel? This will completely erase all progress and saved drafts.")) {
-                clearSavedRouteSession();
-                forceSessionShutdownReset();
+                clearCloudDraft().finally(() => {
+                    clearSavedRouteSession();
+                    forceSessionShutdownReset();
+                });
             }
         }
     }
@@ -802,10 +908,17 @@
                 weather_cond: clientObservedCond
             })
         })
-        .then(() => {
-            alert("🚀 Log secure-synced to spreadsheet records!");
-            clearSavedRouteSession();
-            forceSessionShutdownReset();
+        .then(res => res.json())
+        .then(data => {
+            if (data.status !== "success") {
+                throw new Error(data.message || "Spreadsheet did not confirm successful submission.");
+            }
+
+            clearCloudDraft().finally(() => {
+                alert("🚀 Log secure-synced to spreadsheet records!");
+                clearSavedRouteSession();
+                forceSessionShutdownReset();
+            });
         })
         .catch(() => {
             alert("⚠️ Connection Timeout. Your draft is still saved on this iPad. Try submitting again.");
@@ -856,18 +969,32 @@
         document.addEventListener("visibilitychange", function() {
             if (document.visibilityState === "hidden") {
                 forceSaveDraftNow();
+                backupDraftToCloud();
             }
         });
 
-        window.addEventListener("pagehide", forceSaveDraftNow);
+        window.addEventListener("pagehide", function() {
+            forceSaveDraftNow();
+            backupDraftToCloud();
+        });
         window.addEventListener("beforeunload", forceSaveDraftNow);
-        window.addEventListener("blur", forceSaveDraftNow);
+        window.addEventListener("blur", function() {
+            forceSaveDraftNow();
+            backupDraftToCloud();
+        });
 
         setInterval(function() {
             if (isInspectionActive || localStorage.getItem(activeSessionKey) === "true") {
                 forceSaveDraftNow();
             }
         }, 3000);
+
+        setInterval(function() {
+            if (isInspectionActive || localStorage.getItem(activeSessionKey) === "true") {
+                forceSaveDraftNow();
+                backupDraftToCloud();
+            }
+        }, 10000);
     }
 
     window.onload = function() {
@@ -879,7 +1006,14 @@
         updateLiveClockAndWeather();
         setInterval(updateLiveClockAndWeather, 60000);
 
-        pullSystemStructure();
+        if (!localStorage.getItem(draftStorageKey)) {
+            loadDraftFromCloud().finally(() => {
+                pullSystemStructure();
+            });
+        } else {
+            pullSystemStructure();
+        }
+
         startAutomaticDashboardPolling();
 
         var targetModalNode = document.getElementById('trendChartModal');
@@ -1002,4 +1136,3 @@
 
 </body>
 </html>
-```
